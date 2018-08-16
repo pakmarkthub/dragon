@@ -64,5 +64,5 @@ modified files are contained in this repository. To activate DRAGON, run the
 following script. Note that you should run this script again after your machine
 has rebooted.
 ```
-./<dragon-root>/scripts/activate-dragon
+sudo ./<dragon-root>/scripts/activate-dragon
 ```

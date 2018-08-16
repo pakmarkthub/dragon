@@ -1,0 +1,52 @@
+#!/bin/env python
+
+import argparse
+import os
+import os.path
+import subprocess
+
+CWD = os.path.realpath(os.path.dirname(__file__))
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+        description = 'dragon-driver preparation script'
+    )
+
+    parser.add_argument(
+        'patchfile',
+        type = argparse.FileType('r'),
+        help = 'driver patch file',
+    )
+
+    parser.add_argument(
+        'dfolder',
+        help = 'NVIDIA GPU driver folder',
+    )
+
+    return parser.parse_args()
+
+def main(args):
+    dragon_root_folder = os.path.abspath(os.path.join(CWD, '..'))
+
+    nvidia_kernel_folder = os.path.abspath(os.path.join(args.dfolder, 'kernel'))
+    nvidia_uvm_folder = os.path.join(nvidia_kernel_folder, 'nvidia-uvm')
+
+    subprocess.check_call(
+        ['patch',],
+        cwd = nvidia_uvm_folder,
+        stdin = args.patchfile,
+    )
+
+    subprocess.check_call(
+        ['make', '-j',],
+        cwd = nvidia_kernel_folder,
+    )
+
+    path_commonprefix = os.path.commonprefix([dragon_root_folder, nvidia_kernel_folder,])
+    kernel_symlink_path = os.path.join(dragon_root_folder, 'kernel')
+    if os.path.islink(kernel_symlink_path):
+        os.remove(kernel_symlink_path)
+    os.symlink(os.path.relpath(nvidia_kernel_folder, path_commonprefix), kernel_symlink_path)
+
+if __name__ == '__main__':
+    main(parseargs())
