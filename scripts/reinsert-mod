@@ -1,0 +1,7 @@
+#!/bin/bash
+
+scriptdir=`dirname $0`
+kerneldir=`realpath "${scriptdir}/../kernel"`
+
+rmmod nvidia-uvm
+insmod ${kerneldir}/nvidia-uvm.ko

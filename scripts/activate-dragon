@@ -1,0 +1,18 @@
+#!/bin/bash
+
+scriptdir=`dirname $0`
+rootdir=`realpath "${scriptdir}/.."`
+
+sudo ./${scriptdir}/reinsert-mod
+
+LIBRARY_PATH="${rootdir}/library/lib64:$LIBRARY_PATH"
+LD_LIBRARY_PATH="${rootdir}/library/lib64:$LD_LIBRARY_PATH"
+C_PATH="${rootdir}/library/include:$C_PATH"
+C_INCLUDE_PATH="${rootdir}/library/include:$C_INCLUDE_PATH"
+CPLUS_INCLUDE_PATH="${rootdir}/library/include:$CPLUS_INCLUDE_PATH"
+
+export LIBRARY_PATH
+export LD_LIBRARY_PATH
+export C_PATH
+export C_INCLUDE_PATH
+export CPLUS_INCLUDE_PATH
