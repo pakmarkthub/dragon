@@ -51,3 +51,19 @@ government purposes. DOE will provide public access to these results of
 federally sponsored research in accordance with the DOE Public Access Plan
 (http://energy.gov/downloads/doe-public-access-plan).
 
+## Notes
+
+* **nvmgpu** is the former name of this project. We use *nvmgpu* and *dragon*
+interchangeably throughout the source code.
+
+* If you want to reproduce the results we reported in our SC18 paper *DRAGON:
+Breaking GPU Memory Capacity Limits with Direct NVM Access*, look at the
+[README.md](examples/README.md) file in the *examples* folder for the
+up-to-dated instructions.
+
+* If you use this work, please cite our paper.
+
+    * Pak Markthub, Mehmet E. Belviranli, Seyong Lee, Jeffrey S. Vetter, and Satoshi
+Matsuoka. DRAGON: Breaking GPU Memory Capacity Limits with Direct NVM Access. In
+Proceedings of the International Conference for High Performance Com- puting,
+Networking, Storage and Analysis (SC18). ACM, Dallas, USA, November 2018.
