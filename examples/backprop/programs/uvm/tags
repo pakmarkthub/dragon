@@ -1,0 +1,59 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+ABS	backprop.c	17;"	d	file:
+BIGRND	backprop.h	4;"	d
+BPNN	backprop.h	/^} BPNN;$/;"	t	typeref:struct:__anon1
+CC	Makefile	/^CC = gcc$/;"	m
+CC_FLAGS	Makefile	/^CC_FLAGS = -g  -O2$/;"	m
+ETA	backprop.h	11;"	d
+GPU	backprop.h	6;"	d
+HEIGHT	backprop.h	9;"	d
+MOMENTUM	backprop.h	12;"	d
+NUM_THREAD	backprop.h	13;"	d
+NVCC	Makefile	/^NVCC = $(CUDA_DIR)\/bin\/nvcc$/;"	m
+NVCC_FLAGS	Makefile	/^NVCC_FLAGS = -I$(CUDA_DIR)\/include$/;"	m
+THREADS	backprop.h	7;"	d
+WIDTH	backprop.h	8;"	d
+_BACKPROP_H_	backprop.h	2;"	d
+alloc_1d_dbl	backprop.c	/^float *alloc_1d_dbl(n)$/;"	f
+alloc_2d_dbl	backprop.c	/^float **alloc_2d_dbl(m, n)$/;"	f
+backprop_face	facetrain.c	/^backprop_face()$/;"	f
+bpnn_adjust_weights	backprop.c	/^void bpnn_adjust_weights(delta, ndelta, ly, nly, w, oldw)$/;"	f
+bpnn_create	backprop.c	/^BPNN *bpnn_create(n_in, n_hidden, n_out)$/;"	f
+bpnn_feedforward	backprop.c	/^void bpnn_feedforward(net)$/;"	f
+bpnn_free	backprop.c	/^void bpnn_free(net)$/;"	f
+bpnn_hidden_error	backprop.c	/^void bpnn_hidden_error(delta_h,   $/;"	f
+bpnn_initialize	backprop.c	/^void bpnn_initialize(seed)$/;"	f
+bpnn_internal_create	backprop.c	/^BPNN *bpnn_internal_create(n_in, n_hidden, n_out)$/;"	f
+bpnn_layerforward	backprop.c	/^void bpnn_layerforward(l1, l2, conn, n1, n2)$/;"	f
+bpnn_output_error	backprop.c	/^void bpnn_output_error(delta, target, output, nj, err)  $/;"	f
+bpnn_randomize_row	backprop.c	/^bpnn_randomize_row(w, m)$/;"	f
+bpnn_randomize_weights	backprop.c	/^bpnn_randomize_weights(w, m, n)$/;"	f
+bpnn_read	backprop.c	/^BPNN *bpnn_read(filename)$/;"	f
+bpnn_save	backprop.c	/^void bpnn_save(net, filename)$/;"	f
+bpnn_train	backprop.c	/^void bpnn_train(net, eo, eh)$/;"	f
+bpnn_zero_weights	backprop.c	/^bpnn_zero_weights(w, m, n)$/;"	f
+dpn1	backprop.c	/^float dpn1()$/;"	f
+drnd	backprop.c	/^float drnd()$/;"	f
+fastcopy	backprop.c	19;"	d	file:
+hidden_delta	backprop.h	/^  float *hidden_delta;         \/* storage for hidden unit error *\/$/;"	m	struct:__anon1
+hidden_n	backprop.h	/^  int hidden_n;                 \/* number of hidden units *\/$/;"	m	struct:__anon1
+hidden_prev_weights	backprop.h	/^  float **hidden_prev_weights; \/* previous change on hidden to output wgt *\/$/;"	m	struct:__anon1
+hidden_units	backprop.h	/^  float *hidden_units;         \/* the hidden units *\/$/;"	m	struct:__anon1
+hidden_weights	backprop.h	/^  float **hidden_weights;      \/* weights from hidden to output layer *\/$/;"	m	struct:__anon1
+input_n	backprop.h	/^  int input_n;                  \/* number of input units *\/$/;"	m	struct:__anon1
+input_prev_weights	backprop.h	/^  float **input_prev_weights;  \/* previous change on input to hidden wgt *\/$/;"	m	struct:__anon1
+input_units	backprop.h	/^  float *input_units;          \/* the input units *\/$/;"	m	struct:__anon1
+input_weights	backprop.h	/^  float **input_weights;       \/* weights from input to hidden layer *\/$/;"	m	struct:__anon1
+layer_size	facetrain.c	/^int layer_size = 0;$/;"	v
+load	imagenet.c	/^load(net)$/;"	f
+output_delta	backprop.h	/^  float *output_delta;         \/* storage for output unit error *\/$/;"	m	struct:__anon1
+output_n	backprop.h	/^  int output_n;                 \/* number of output units *\/$/;"	m	struct:__anon1
+output_units	backprop.h	/^  float *output_units;         \/* the output units *\/$/;"	m	struct:__anon1
+setup	facetrain.c	/^int setup(argc, argv)$/;"	f
+squash	backprop.c	/^float squash(x)$/;"	f
+target	backprop.h	/^  float *target;               \/* storage for target vector *\/$/;"	m	struct:__anon1
