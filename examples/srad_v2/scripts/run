@@ -1,0 +1,285 @@
+#!/bin/env python
+
+import argparse
+import os.path
+import subprocess
+import ctypes
+import shutil
+import time
+
+CWD = os.path.realpath(os.path.dirname(__file__))
+
+def type_folder(path):
+    if not os.path.isdir(path):
+        raise argparse.ArgumentTypeError('The specified path "{}" does not exist'.format(path))
+    return path
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+        description = 'backprop run benchmark'
+    )
+
+    parser.add_argument(
+        'dfolder', type = type_folder,
+        help = 'Data folder'
+    )
+
+    parser.add_argument(
+        'ftype',
+        choices = ('item', 'container',),
+        help = 'Data folder type'
+    )
+
+    parser.add_argument(
+        'ofile',
+        type = argparse.FileType('w'),
+        help = 'Output result file'
+    )
+
+    parser.add_argument(
+        '--efile',
+        type = argparse.FileType('w'),
+        default = None,
+        help = 'Error file'
+    )
+
+    parser.add_argument(
+        '--prog',
+        choices = ('cudamemcpy', 'uvm', 'hostreg', 'nvmgpu', 'all',),
+        default = 'all',
+        help = 'Experiment to run (default: all)'
+    )
+
+    parser.add_argument(
+        '--repeat',
+        type = int,
+        default = 5,
+        help = 'Number of times to repeat each experiment (default: 5)'
+    )
+
+    return parser.parse_args()
+
+def load_original_driver():
+    print('Loading original NVIDIA driver ...')
+    subprocess.call([
+        'rmmod',
+        'nvidia-uvm',
+    ])
+    subprocess.check_call([
+        'modprobe',
+        'nvidia-uvm',
+    ])
+
+def load_nvmgpu_driver(use_old_driver):
+    print('Loading DRAGON driver ...')
+    path = os.path.join(CWD, '../../../scripts/')
+    exec_path = os.path.join(path, 'reinsert-mod.sh')
+    p = subprocess.Popen([exec_path,], cwd = path)
+    retcode = p.wait()
+    if retcode != 0:
+        raise Exception("Cannot load nvmgpu driver")
+
+def create_dfolder_generator(args):
+    if args.ftype == 'item':
+        with open(os.path.join(args.dfolder, 'args.conf'), 'r') as f:
+            params = f.read().strip().replace('{{ folder }}', args.dfolder).split()
+            yield [args.dfolder, params,]
+    else:
+        for folder in os.listdir(args.dfolder):
+            path = os.path.join(args.dfolder, folder)
+            with open(os.path.join(path, 'args.conf'), 'r') as f:
+                params = f.read().strip().replace('{{ folder }}', path).split()
+                yield [path, params,]
+
+def write_script_header(args, step, prog, dfolder):
+    strings = [
+        '===> script_header: step,prog,dfolder\n',
+        '===> script_header_data: %d,%s,%s\n' % (step + 1, prog, dfolder,),
+    ]
+    if args.efile:
+        args.efile.writelines(strings)
+        args.efile.flush()
+        os.fsync(args.efile.fileno())
+    args.ofile.writelines(strings)
+    args.ofile.flush()
+    os.fsync(args.ofile.fileno())
+
+def write_script_footer(args, step, prog, dfolder, retcode):
+    strings = [
+        '\n',
+        '===> script_footer: step,prog,dfolder,retcode\n',
+        '===> script_footer_data: %d,%s,%s,%d\n' % (step + 1, prog, dfolder, retcode),
+        '\n',
+    ]
+    if args.efile:
+        args.efile.writelines(strings)
+        args.efile.flush()
+        os.fsync(args.efile.fileno())
+    args.ofile.writelines(strings)
+    args.ofile.flush()
+    os.fsync(args.ofile.fileno())
+
+def clear_cache():
+    print("Clearing page cache ...")
+    subprocess.check_call([
+        os.path.join(CWD, '../../../scripts/drop-caches.sh'),
+    ])
+
+def clear_dmesg():
+    print("Clearing dmesg ...")
+    subprocess.check_call([
+        'dmesg',
+        '-C',
+    ])
+
+def sync_fs():
+    print("Sync ...")
+    subprocess.check_call([
+        'sync',
+    ])
+    clear_cache()
+
+def dump_dmesg(args):
+    print("Dumping dmesg ...")
+    subprocess.call(
+        ['dmesg', '-t',],
+        stdout = args.ofile,
+        stderr = args.efile,
+    )
+
+def validate_output(args, filepath):
+    print("Validating output {}...".format(filepath))
+    md5sum = subprocess.check_output(['md5sum', filepath,]).strip().split()[0]
+    args.ofile.write('===> validation: {} {}\n'.format(filepath, md5sum))
+    args.ofile.flush()
+    os.fsync(args.ofile.fileno())
+
+def copy_file_template(prog, folder, fname):
+    src = os.path.join(folder, '{}.mem'.format(fname))
+    dst = os.path.join(folder, '{}.{}.mem'.format(fname, prog))
+
+    print("Copying {} to {} ...".format(src, dst))
+    shutil.copy(src, dst)
+
+    return dst
+
+def run_cudamemcpy(args):
+    load_original_driver()
+    prog = os.path.join(CWD, '../programs/bin/cudamemcpy')
+    for folder, params in create_dfolder_generator(args):
+        for t in range(args.repeat):
+            print("Benchmarking with cudamemcpy ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
+            write_script_header(args, t, 'cudamemcpy', folder)
+            files_to_be_validated = [
+                copy_file_template('cudamemcpy', folder, 'J'),
+            ]
+            clear_cache()
+            print("Running the program ...")
+            retcode = subprocess.call(
+                [prog,] + params, 
+                stdout = args.ofile,
+                stderr = args.efile
+            )
+            if retcode == 0:
+                for path in files_to_be_validated:
+                    validate_output(args, path)
+            write_script_footer(args, t, 'cudamemcpy', folder, retcode)
+            if retcode != 0:
+                print("Execution failed!! Break")
+                break
+
+def run_hostreg(args):
+    load_original_driver()
+    prog = os.path.join(CWD, '../programs/bin/hostreg')
+    for folder, params in create_dfolder_generator(args):
+        for t in range(args.repeat):
+            print("Benchmarking with hostreg ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
+            write_script_header(args, t, 'hostreg', folder)
+            files_to_be_validated = [
+                copy_file_template('hostreg', folder, 'J'),
+            ]
+            clear_cache()
+            print("Running the program ...")
+            retcode = subprocess.call(
+                [prog,] + params, 
+                stdout = args.ofile,
+                stderr = args.efile
+            )
+            if retcode == 0:
+                for path in files_to_be_validated:
+                    validate_output(args, path)
+            write_script_footer(args, t, 'hostreg', folder, retcode)
+            if retcode != 0:
+                print("Execution failed!! Break")
+                break
+
+def run_uvm(args):
+    load_original_driver()
+    prog = os.path.join(CWD, '../programs/bin/uvm')
+    for folder, params in create_dfolder_generator(args):
+        for t in range(args.repeat):
+            print("Benchmarking with uvm ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
+            write_script_header(args, t, 'uvm', folder)
+            files_to_be_validated = [
+                copy_file_template('uvm', folder, 'J'),
+            ]
+            clear_cache()
+            print("Running the program ...")
+            retcode = subprocess.call(
+                [prog,] + params, 
+                stdout = args.ofile,
+                stderr = args.efile
+            )
+            if retcode == 0:
+                for path in files_to_be_validated:
+                    validate_output(args, path)
+            write_script_footer(args, t, 'uvm', folder, retcode)
+            if retcode != 0:
+                print("Execution failed!! Break")
+                break
+
+def run_nvmgpu(args):
+    load_nvmgpu_driver()
+    prog = os.path.join(CWD, '../programs/bin/nvmgpu')
+    for folder, params in create_dfolder_generator(args):
+        for t in range(args.repeat):
+            print("Benchmarking with nvmgpu ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
+            write_script_header(args, t, 'nvmgpu', folder)
+            files_to_be_validated = [
+                copy_file_template('nvmgpu', folder, 'J'),
+            ]
+            clear_cache()
+            clear_dmesg()
+            print("Running the program ...")
+            retcode = subprocess.call(
+                [prog,] + params, 
+                stdout = args.ofile,
+                stderr = args.efile
+            )
+            dump_dmesg(args)
+            sync_fs()
+            if retcode == 0:
+                for path in files_to_be_validated:
+                    validate_output(args, path)
+            write_script_footer(args, t, 'nvmgpu', folder, retcode)
+            if retcode != 0:
+                print("Execution failed!! Break")
+                break
+
+def main(args):
+    if args.prog == 'all':
+        run_cudamemcpy(args)
+        run_uvm(args)
+        run_nvmgpu(args)
+    elif args.prog == 'cudamemcpy':
+        run_cudamemcpy(args)
+    elif args.prog == 'hostreg':
+        run_hostreg(args)
+    elif args.prog == 'uvm':
+        run_uvm(args)
+    elif args.prog == 'nvmgpu':
+        run_nvmgpu(args)
+
+if __name__ == '__main__':
+    main(parseargs())
+    
