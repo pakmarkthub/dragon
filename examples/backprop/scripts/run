@@ -45,7 +45,7 @@ def parseargs():
 
     parser.add_argument(
         '--prog',
-        choices = ('cudamemcpy', 'uvm', 'hostreg', 'nvmgpu', 'nvmgpu-old', 'all',),
+        choices = ('cudamemcpy', 'uvm', 'hostreg', 'nvmgpu', 'all',),
         default = 'all',
         help = 'Experiment to run (default: all)'
     )
@@ -70,13 +70,9 @@ def load_original_driver():
         'nvidia-uvm',
     ])
 
-def load_nvmgpu_driver(use_old_driver):
-    if use_old_driver:
-        print('Loading old nvmgpu driver ...')
-        path = os.path.join(CWD, '../../../kernel-original/')
-    else:
-        print('Loading new nvmgpu driver ...')
-        path = os.path.join(CWD, '../../../scripts/')
+def load_nvmgpu_driver():
+    print('Loading DRAGON driver ...')
+    path = os.path.join(CWD, '../../../scripts/')
     exec_path = os.path.join(path, 'reinsert-mod')
     p = subprocess.Popen([exec_path,], cwd = path)
     retcode = p.wait()
@@ -260,8 +256,8 @@ def run_hostreg(args):
                 print("Execution failed!! Break")
                 break
 
-def run_nvmgpu(args, use_old_driver = False):
-    load_nvmgpu_driver(use_old_driver)
+def run_nvmgpu(args):
+    load_nvmgpu_driver()
     prog = os.path.join(CWD, '../programs/bin/nvmgpu')
     for folder, params in create_dfolder_generator(args):
         for t in range(args.repeat):
@@ -303,7 +299,6 @@ def main(args):
         run_uvm(args)
         run_hostreg(args)
         run_nvmgpu(args)
-        #run_nvmgpu(args, use_old_driver = True)
     elif args.prog == 'cudamemcpy':
         run_cudamemcpy(args)
     elif args.prog == 'uvm':
@@ -312,8 +307,6 @@ def main(args):
         run_hostreg(args)
     elif args.prog == 'nvmgpu':
         run_nvmgpu(args)
-    elif args.prog == 'nvmgpu-old':
-        run_nvmgpu(args, use_old_driver = True)
 
 if __name__ == '__main__':
     main(parseargs())

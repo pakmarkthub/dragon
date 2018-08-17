@@ -1,0 +1,119 @@
+#!/bin/env python
+
+import argparse
+import os.path
+import subprocess
+import ctypes
+import math
+
+def type_folder(path):
+    if not os.path.isdir(path):
+        raise argparse.ArgumentTypeError('The specified path "{}" does not exist'.format(path))
+    return path
+
+def type_size(string):
+    unit_map = {
+        'K': 2 ** 10,
+        'M': 2 ** 20,
+        'G': 2 ** 30,
+    }
+    if string[-1] in unit_map:
+        return int(string[:-1]) * unit_map[string[-1]]
+    else:
+        return int(string)
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+        description = 'pathfinder input generator'
+    )
+
+    parser.add_argument(
+        'folder', type = type_folder,
+        help = 'Output folder'
+    )
+
+    subparsers = parser.add_subparsers()
+
+    parser_item = subparsers.add_parser('item')
+    parser_item.set_defaults(_method = 'item')
+
+    parser_item.add_argument(
+        'mem', type = type_size,
+        help = 'Memory footprint (accept untis: K, M, G)'
+    )
+
+    parser_range = subparsers.add_parser('range')
+    parser_range.set_defaults(_method = 'range')
+
+    parser_range.add_argument(
+        'begin', type = type_size,
+        help = 'Begin memory footprint (accept untis: K, M, G)'
+    )
+
+    parser_range.add_argument(
+        'end', type = type_size,
+        help = 'End memory footprint (accept untis: K, M, G)'
+    )
+
+    parser_range.add_argument(
+        '-s', '--step',
+        type = int,
+        default = 2,
+        help = 'Increment step (default: 2 times)'
+    )
+
+    args = parser.parse_args()
+
+    if args._method == 'range' and args.begin > args.end:
+        parser.error('begin should be less than or equal to end')
+    
+    return args
+
+def gen_item(folder, mem):
+    element_size = ctypes.sizeof(ctypes.c_float)
+    rows = int(math.sqrt(mem / (element_size * 3)))
+    rows = int(rows / 1024) * 1024
+
+    exec_path = os.path.join(os.path.realpath(os.path.dirname(__file__)), '../programs/bin/generator')
+
+    print('Generating {} ...'.format(folder))
+
+    sample_input_path = os.path.join(os.path.realpath(os.path.dirname(__file__)), '../programs/input/')
+
+    subprocess.check_call([
+        exec_path,
+        os.path.join(sample_input_path, 'temp_1024'),
+        os.path.join(sample_input_path, 'power_1024'),
+        os.path.join(folder, 'temp.mem'),
+        os.path.join(folder, 'power.mem'),
+        '1024',
+        '{:d}'.format(rows),
+    ])
+
+    path = os.path.join(folder, 'args.conf')
+    with open(path, 'w') as fp:
+        fp.write('%d 2 1 {{ temp }} {{ power }} {{ output }}' % (rows,))
+
+def main(args):
+    if args._method == 'item':
+        gen_item(args.folder, args.mem)
+    else:
+        mem = args.begin
+        while mem <= args.end:
+            if mem >= 2 ** 30:
+                subfolder = '{:d}G'.format(mem / (2 ** 30))
+            elif mem >= 2 ** 20:
+                subfolder = '{:d}M'.format(mem / (2 ** 20))
+            elif mem >= 2 ** 10:
+                subfolder = '{:d}K'.format(mem / (2 ** 10))
+            else:
+                subfolder = '{}B'.format(mem)
+            item_folder = os.path.join(args.folder, subfolder)
+            if not os.path.isdir(item_folder):
+                os.mkdir(item_folder)
+            gen_item(item_folder, mem)
+            mem *= args.step
+
+if __name__ == '__main__':
+    main(parseargs())
+    
