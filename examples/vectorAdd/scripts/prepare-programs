@@ -1,0 +1,49 @@
+#!/bin/env python
+
+import argparse
+import os
+import os.path
+import subprocess
+
+CWD = os.path.realpath(os.path.dirname(__file__))
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+        description = 'Preparation script for vectorAdd programs'
+    )
+
+    parser.add_argument(
+        'sfolder',
+        help = 'NVIDIA CUDA sample folder',
+    )
+
+    return parser.parse_args()
+
+def main(args):
+    nvidia_sample_folder = os.path.abspath(args.sfolder)
+    nvidia_sample_vectorAdd_folder = os.path.join(nvidia_sample_folder, '0_Simple', 'vectorAdd')
+
+    patch_folder = os.path.join(CWD, '..', 'patches')
+    program_folder = os.path.join(CWD, '..', 'programs')
+
+    for prog_type in ['ap', 'cudamemcpy', 'hostreg', 'nvmgpu', 'uvm',]:
+        dst_folder = os.path.join(program_folder, prog_type)
+        subprocess.check_call(
+            ['cp', '-r', nvidia_sample_vectorAdd_folder, dst_folder,]
+        )
+
+        pfile_str = os.path.join(patch_folder, '{}.patch'.format(prog_type))
+        with open(pfile_str, 'r') as f:
+            subprocess.check_call(
+                ['patch',],
+                cwd = dst_folder,
+                stdin = f,
+            )
+
+    subprocess.check_call(
+        ['make', '-j',],
+        cwd = program_folder,
+    )
+
+if __name__ == '__main__':
+    main(parseargs())

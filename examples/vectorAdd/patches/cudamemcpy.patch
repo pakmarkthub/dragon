@@ -1,0 +1,339 @@
+diff -Naru /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/Makefile ../programs/cudamemcpy/Makefile
+--- /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/Makefile	2018-08-16 14:37:03.807764125 +0900
++++ ../programs/cudamemcpy/Makefile	2018-08-21 01:21:55.014178192 +0900
+@@ -182,11 +182,6 @@
+     endif
+ endif
+ 
+-ifeq ($(TARGET_OS),qnx)
+-    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+-    LDFLAGS += -lsocket
+-endif
+-
+ # Debug build flags
+ ifeq ($(dbg),1)
+       NVCCFLAGS += -g -G
+@@ -209,13 +204,13 @@
+ ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
+ 
+ # Common includes and paths for CUDA
+-INCLUDES  := -I../../common/inc
++INCLUDES  := -I$(CUDA_PATH)/samples/common/inc
+ LIBRARIES :=
+ 
+ ################################################################################
+ 
+ # Gencode arguments
+-SMS ?= 30 35 37 50 52 60 70
++SMS ?= 60
+ 
+ ifeq ($(SMS),)
+ $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
+@@ -256,14 +251,14 @@
+ 
+ vectorAdd: vectorAdd.o
+ 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+-	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+-	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
++	$(EXEC) mkdir -p bin/
++	$(EXEC) mv $@ bin/
+ 
+ run: build
+ 	$(EXEC) ./vectorAdd
+ 
+ clean:
+ 	rm -f vectorAdd vectorAdd.o
+-	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/vectorAdd
++	rm -rf bin/
+ 
+ clobber: clean
+diff -Naru /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/NsightEclipse.xml ../programs/cudamemcpy/NsightEclipse.xml
+--- /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/NsightEclipse.xml	2018-08-16 14:37:03.297764285 +0900
++++ ../programs/cudamemcpy/NsightEclipse.xml	2018-08-21 01:21:55.015178191 +0900
+@@ -37,13 +37,13 @@
+     <scope>1:CUDA Basic Topics</scope>
+     <scope>3:Linear Algebra</scope>
+   </scopes>
++  <sm-arch>sm20</sm-arch>
+   <sm-arch>sm30</sm-arch>
+   <sm-arch>sm35</sm-arch>
+   <sm-arch>sm37</sm-arch>
+   <sm-arch>sm50</sm-arch>
+   <sm-arch>sm52</sm-arch>
+   <sm-arch>sm60</sm-arch>
+-  <sm-arch>sm70</sm-arch>
+   <supported_envs>
+     <env>
+       <arch>x86_64</arch>
+diff -Naru /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/vectorAdd.cu ../programs/cudamemcpy/vectorAdd.cu
+--- /usr/local/cuda-9.0/samples/0_Simple/vectorAdd/vectorAdd.cu	2018-08-16 14:37:03.297764285 +0900
++++ ../programs/cudamemcpy/vectorAdd.cu	2018-08-21 01:21:55.015178191 +0900
+@@ -18,11 +18,41 @@
+  */
+ 
+ #include <stdio.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <sys/time.h>
+ 
+ // For the CUDA runtime routines (prefixed with "cuda_")
+ #include <cuda_runtime.h>
+ 
+ #include <helper_cuda.h>
++
++#define CUDA_CALL_SAFE(f) \
++    do \
++    {                                                        \
++        cudaError_t _cuda_error = f;                         \
++        if (_cuda_error != cudaSuccess)                      \
++        {                                                    \
++            fprintf(stderr,  \
++                "%s, %d, CUDA ERROR: %s %s\n",  \
++                __FILE__,   \
++                __LINE__,   \
++                cudaGetErrorName(_cuda_error),  \
++                cudaGetErrorString(_cuda_error) \
++            ); \
++            abort(); \
++            return EXIT_FAILURE; \
++        } \
++    } while (0)        
++
++double time_diff(struct timeval tv_start, struct timeval tv_stop)
++{
++    return (double)(tv_stop.tv_sec - tv_start.tv_sec) * 1000.0 + (double)(tv_stop.tv_usec - tv_start.tv_usec) / 1000.0;
++}
+ /**
+  * CUDA Kernel Device code
+  *
+@@ -30,11 +60,11 @@
+  * number of elements numElements.
+  */
+ __global__ void
+-vectorAdd(const float *A, const float *B, float *C, int numElements)
++vectorAdd(const float *A, const float *B, float *C, unsigned long numElements)
+ {
+-    int i = blockDim.x * blockIdx.x + threadIdx.x;
++    unsigned long i = (unsigned long)blockDim.x * (unsigned long)blockIdx.x + (unsigned long)threadIdx.x;
+ 
+-    if (i < numElements)
++   if (i < numElements)
+     {
+         C[i] = A[i] + B[i];
+     }
+@@ -43,15 +73,41 @@
+ /**
+  * Host main routine
+  */
+-int
+-main(void)
++int main(int argc, char *argv[])
+ {
+     // Error code to check return values for CUDA calls
+     cudaError_t err = cudaSuccess;
+ 
++    FILE *fp;
++
++    cudaEvent_t start_event, stop_event;
++
++    struct timeval tv_start, tv_stop;
++    double writefile_time = 0;       // in ms
++    double readfile_time = 0;       // in ms
++    double d2h_memcpy_time = 0;       // in ms
++    double h2d_memcpy_time = 0;       // in ms
++    float kernel_time = 0;          // in ms
++
++    if (argc != 4)
++    {
++        fprintf(stderr, "Usage: %s <vector_size> <threads_per_block> <folder>\n", argv[0]);
++        return EXIT_SUCCESS;
++    }
++
++    unsigned long numElements = atol(argv[1]);
++    size_t threads_per_block = atol(argv[2]);
++    char *folder = argv[3];
++
++    char *filepath = (char *)malloc(sizeof(char) * (strlen(folder) + 128));
++    if (!filepath)
++    {
++        fprintf(stderr, "Cannot allocate filepath");
++        exit(EXIT_FAILURE);
++    }
++
+     // Print the vector length to be used, and compute its size
+-    int numElements = 50000;
+-    size_t size = numElements * sizeof(float);
++    size_t size = sizeof(float) * numElements;
+     printf("[Vector addition of %d elements]\n", numElements);
+ 
+     // Allocate the host input vector A
+@@ -71,11 +127,40 @@
+     }
+ 
+     // Initialize the host input vectors
+-    for (int i = 0; i < numElements; ++i)
++    gettimeofday(&tv_start, NULL);
++
++    sprintf(filepath, "%s/a.mem", folder);
++	if ((fp = fopen(filepath, "rb")) == 0)
++    {
++        fprintf(stderr, "%s was not opened\n", filepath);
++        exit(EXIT_FAILURE);
++    }
++
++    if (fread(h_A, size, 1, fp) != 1)
+     {
+-        h_A[i] = rand()/(float)RAND_MAX;
+-        h_B[i] = rand()/(float)RAND_MAX;
++        fprintf(stderr, "Cannot read from %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
++	fclose(fp);	
++
++    sprintf(filepath, "%s/b.mem", folder);
++	if ((fp = fopen(filepath, "rb")) == 0)
++    {
++        fprintf(stderr, "%s was not opened\n", filepath);
++        exit(EXIT_FAILURE);
++    }
++
++    if (fread(h_B, size, 1, fp) != 1)
++    {
++        fprintf(stderr, "Cannot read from %s\n", filepath);
++        exit(EXIT_FAILURE);
++    }
++	fclose(fp);	
++
++    gettimeofday(&tv_stop, NULL);
++
++    readfile_time = time_diff(tv_start, tv_stop);
++
+ 
+     // Allocate the device input vector A
+     float *d_A = NULL;
+@@ -110,6 +195,7 @@
+     // Copy the host input vectors A and B in host memory to the device input vectors in
+     // device memory
+     printf("Copy input data from the host memory to the CUDA device\n");
++    gettimeofday(&tv_start, NULL);
+     err = cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+ 
+     if (err != cudaSuccess)
+@@ -126,11 +212,30 @@
+         exit(EXIT_FAILURE);
+     }
+ 
++    /* Original implementation does not have this. We add it for "fair" comparison. */
++    err = cudaMemcpy(d_C, h_C, size, cudaMemcpyHostToDevice);
++
++    if (err != cudaSuccess)
++    {
++        fprintf(stderr, "Failed to copy vector B from host to device (error code %s)!\n", cudaGetErrorString(err));
++        exit(EXIT_FAILURE);
++    }
++    gettimeofday(&tv_stop, NULL);
++
++    h2d_memcpy_time = time_diff(tv_start, tv_stop);
++
++
++    CUDA_CALL_SAFE(cudaEventCreate(&start_event));
++    CUDA_CALL_SAFE(cudaEventCreate(&stop_event));
++
+     // Launch the Vector Add CUDA Kernel
+-    int threadsPerBlock = 256;
+-    int blocksPerGrid =(numElements + threadsPerBlock - 1) / threadsPerBlock;
+-    printf("CUDA kernel launch with %d blocks of %d threads\n", blocksPerGrid, threadsPerBlock);
+-    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, numElements);
++    int blocksPerGrid = (numElements + threads_per_block - 1) / threads_per_block;
++    printf("CUDA kernel launch with %d blocks of %d threads\n", blocksPerGrid, threads_per_block);
++    CUDA_CALL_SAFE(cudaEventRecord(start_event));
++    vectorAdd<<<blocksPerGrid, threads_per_block>>>(d_A, d_B, d_C, numElements);
++    CUDA_CALL_SAFE(cudaEventRecord(stop_event));
++    CUDA_CALL_SAFE(cudaEventSynchronize(stop_event));
++    CUDA_CALL_SAFE(cudaEventElapsedTime(&kernel_time, start_event, stop_event));
+     err = cudaGetLastError();
+ 
+     if (err != cudaSuccess)
+@@ -142,16 +247,36 @@
+     // Copy the device result vector in device memory to the host result vector
+     // in host memory.
+     printf("Copy output data from the CUDA device to the host memory\n");
+-    err = cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
++    gettimeofday(&tv_start, NULL);
++    /* Original implementation does not have this. We add it for "fair" comparison. */
++    err = cudaMemcpy(h_A, d_A, size, cudaMemcpyDeviceToHost);
++    if (err != cudaSuccess)
++    {
++        fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
++        exit(EXIT_FAILURE);
++    }
+ 
++    /* Original implementation does not have this. We add it for "fair" comparison. */
++    err = cudaMemcpy(h_B, d_B, size, cudaMemcpyDeviceToHost);
+     if (err != cudaSuccess)
+     {
+         fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
+         exit(EXIT_FAILURE);
+     }
+ 
++    err = cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
++    if (err != cudaSuccess)
++    {
++        fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
++        exit(EXIT_FAILURE);
++    }
++    gettimeofday(&tv_stop, NULL);
++
++    d2h_memcpy_time = time_diff(tv_start, tv_stop);
++
++
+     // Verify that the result vector is correct
+-    for (int i = 0; i < numElements; ++i)
++    /*for (int i = 0; i < numElements; ++i)
+     {
+         if (fabs(h_A[i] + h_B[i] - h_C[i]) > 1e-5)
+         {
+@@ -160,7 +285,26 @@
+         }
+     }
+ 
+-    printf("Test PASSED\n");
++    printf("Test PASSED\n");*/
++
++    gettimeofday(&tv_start, NULL);
++    sprintf(filepath, "%s/c.cudamemcpy.mem", folder);
++	if ((fp = fopen(filepath, "wb")) == 0)
++    {
++        fprintf(stderr, "%s was not opened\n", filepath);
++        exit(EXIT_FAILURE);
++    }
++
++    if (fwrite(h_C, size, 1, fp) != 1)
++    {
++        fprintf(stderr, "Cannot write to %s\n", filepath);
++        exit(EXIT_FAILURE);
++    }
++    fsync(fileno(fp));
++	fclose(fp);	
++    gettimeofday(&tv_stop, NULL);
++
++    writefile_time = time_diff(tv_start, tv_stop);
+ 
+     // Free device global memory
+     err = cudaFree(d_A);
+@@ -192,7 +336,10 @@
+     free(h_B);
+     free(h_C);
+ 
+-    printf("Done\n");
++    free(filepath);
++
++    printf("==> header: kernel_time (ms),writefile_time (ms),d2h_memcpy_time (ms),readfile_time (ms),h2d_memcpy_time (ms)\n");
++    printf("==> data: %f,%f,%f,%f,%f\n", kernel_time, writefile_time, d2h_memcpy_time, readfile_time, h2d_memcpy_time);
+     return 0;
+ }
+ 
