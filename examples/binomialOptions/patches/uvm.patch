@@ -1,0 +1,627 @@
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_common.h uvm/binomialOptions_common.h
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_common.h	2018-08-16 14:37:03.489764225 +0900
++++ uvm/binomialOptions_common.h	2018-08-22 22:32:20.693910063 +0900
+@@ -23,10 +23,10 @@
+ {
+     real S;
+     real X;
+-    real T;
+-    real R;
+-    real V;
+-} TOptionData;
++    real vDt;
++    real puByDf;
++    real pdByDf;
++} __TOptionData;
+ 
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -34,8 +34,11 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ //Number of time steps
+ #define   NUM_STEPS 2048
+-//Max option batch size
+-#define MAX_OPTIONS 1024
++
++static inline double time_diff(struct timeval tv_start, struct timeval tv_end)
++{
++    return (double)(tv_end.tv_sec - tv_start.tv_sec) * 1000.0 + (double)(tv_end.tv_usec - tv_start.tv_usec) / 1000.0;
++}
+ 
+ 
+ 
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions.cpp uvm/binomialOptions.cpp
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions.cpp	2018-08-16 14:37:03.490764224 +0900
++++ uvm/binomialOptions.cpp	2018-08-22 22:32:20.693910063 +0900
+@@ -15,12 +15,12 @@
+  * See supplied whitepaper for more explanations.
+  */
+ 
+-
+-
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
++#include <unistd.h>
+ #include <math.h>
++#include <sys/time.h>
+ #include <cuda_runtime.h>
+ 
+ #include <helper_functions.h>
+@@ -29,175 +29,104 @@
+ #include "binomialOptions_common.h"
+ #include "realtype.h"
+ 
+-////////////////////////////////////////////////////////////////////////////////
+-// Black-Scholes formula for binomial tree results validation
+-////////////////////////////////////////////////////////////////////////////////
+-extern "C" void BlackScholesCall(
+-    real &callResult,
+-    TOptionData optionData
+-);
+-
+-////////////////////////////////////////////////////////////////////////////////
+-// Process single option on CPU
+-// Note that CPU code is for correctness testing only and not for benchmarking.
+-////////////////////////////////////////////////////////////////////////////////
+-extern "C" void binomialOptionsCPU(
+-    real &callResult,
+-    TOptionData optionData
+-);
++double kernel_time = 0;       // in ms
++double writefile_time = 0;       // in ms
++double readfile_time = 0;       // in ms
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ // Process an array of OptN options on GPU
+ ////////////////////////////////////////////////////////////////////////////////
+ extern "C" void binomialOptionsGPU(
+     real *callValue,
+-    TOptionData  *optionData,
+-    int optN
++    __TOptionData  *optionData,
++    long optN
+ );
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+-// Helper function, returning uniformly distributed
+-// random float in [low, high] range
+-////////////////////////////////////////////////////////////////////////////////
+-real randData(real low, real high)
+-{
+-    real t = (real)rand() / (real)RAND_MAX;
+-    return ((real)1.0 - t) * low + t * high;
+-}
+-
+-
+-
+-////////////////////////////////////////////////////////////////////////////////
+ // Main program
+ ////////////////////////////////////////////////////////////////////////////////
+ int main(int argc, char **argv)
+ {
+-    printf("[%s] - Starting...\n", argv[0]);
+-
+-    int devID = findCudaDevice(argc, (const char **)argv);
+-
+-    const int OPT_N = MAX_OPTIONS;
+-
+-    TOptionData optionData[MAX_OPTIONS];
+-    real
+-    callValueBS[MAX_OPTIONS],
+-                callValueGPU[MAX_OPTIONS],
+-                callValueCPU[MAX_OPTIONS];
+-
+-    real
+-    sumDelta, sumRef, gpuTime, errorVal;
+-
+-    StopWatchInterface *hTimer = NULL;
+-    int i;
+-
+-    sdkCreateTimer(&hTimer);
++    struct timeval tv_start, tv_end;
+ 
+-    printf("Generating input data...\n");
+-    //Generate options set
+-    srand(123);
++    FILE *fp;
+ 
+-    for (i = 0; i < OPT_N; i++)
++    if (argc != 3)
+     {
+-        optionData[i].S = randData(5.0f, 30.0f);
+-        optionData[i].X = randData(1.0f, 100.0f);
+-        optionData[i].T = randData(0.25f, 10.0f);
+-        optionData[i].R = 0.06f;
+-        optionData[i].V = 0.10f;
+-        BlackScholesCall(callValueBS[i], optionData[i]);
++        fprintf(stderr, "Usage: %s <OPT_N> <folder>\n", argv[0]);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    printf("Running GPU binomial tree...\n");
+-    checkCudaErrors(cudaDeviceSynchronize());
+-    sdkResetTimer(&hTimer);
+-    sdkStartTimer(&hTimer);
+-
+-    binomialOptionsGPU(callValueGPU, optionData, OPT_N);
+-
+-    checkCudaErrors(cudaDeviceSynchronize());
+-    sdkStopTimer(&hTimer);
+-    gpuTime = sdkGetTimerValue(&hTimer);
+-    printf("Options count            : %i     \n", OPT_N);
+-    printf("Time steps               : %i     \n", NUM_STEPS);
+-    printf("binomialOptionsGPU() time: %f msec\n", gpuTime);
+-    printf("Options per second       : %f     \n", OPT_N / (gpuTime * 0.001));
+-
+-    printf("Running CPU binomial tree...\n");
+-
+-    for (i = 0; i < OPT_N; i++)
++    const long OPT_N = atol(argv[1]);
++    if (OPT_N <= 0)
+     {
+-        binomialOptionsCPU(callValueCPU[i], optionData[i]);
++        fprintf(stderr, "OPT_N must be greater than 0 but we got %ld\n", OPT_N);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    printf("Comparing the results...\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
+-    printf("GPU binomial vs. Black-Scholes\n");
+-
+-    for (i = 0; i < OPT_N; i++)
++    char *folder = argv[2];
++    char *filepath = (char *)malloc(sizeof(char) * (strlen(folder) + 128));
++    if (!filepath)
+     {
+-        sumDelta += fabs(callValueBS[i] - callValueGPU[i]);
+-        sumRef += fabs(callValueBS[i]);
++        fprintf(stderr, "Cannot allocate filepath\n");
++        exit(EXIT_FAILURE);
+     }
+ 
+-    if (sumRef >1E-5)
+-    {
+-        printf("L1 norm: %E\n", (double)(sumDelta / sumRef));
+-    }
+-    else
+-    {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
+-    }
++    real *callValueGPU;
++    checkCudaErrors(cudaMallocManaged((void **)&callValueGPU, sizeof(real) * OPT_N));
+ 
+-    printf("CPU binomial vs. Black-Scholes\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
++    __TOptionData *optionData;
++    checkCudaErrors(cudaMallocManaged((void **)&optionData, sizeof(__TOptionData) * OPT_N));
+ 
+-    for (i = 0; i < OPT_N; i++)
++    gettimeofday(&tv_start, NULL);
++    sprintf(filepath, "%s/optionData.mem", folder);
++	if ((fp = fopen(filepath, "rb")) == 0)
+     {
+-        sumDelta += fabs(callValueBS[i]- callValueCPU[i]);
+-        sumRef += fabs(callValueBS[i]);
++        fprintf(stderr, "%s was not opened\n", filepath);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    if (sumRef >1E-5)
++    if (fread(optionData, OPT_N * sizeof(__TOptionData), 1, fp) != 1)
+     {
+-        printf("L1 norm: %E\n", sumDelta / sumRef);
+-    }
+-    else
+-    {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
++        fprintf(stderr, "Cannot read from %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
++	fclose(fp);
++    gettimeofday(&tv_end, NULL);
+ 
+-    printf("CPU binomial vs. GPU binomial\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
++    readfile_time += time_diff(tv_start, tv_end);
+ 
+-    for (i = 0; i < OPT_N; i++)
+-    {
+-        sumDelta += fabs(callValueGPU[i] - callValueCPU[i]);
+-        sumRef += callValueCPU[i];
+-    }
++    printf("Running GPU binomial tree...\n");
++    checkCudaErrors(cudaDeviceSynchronize());
++
++    binomialOptionsGPU(callValueGPU, optionData, OPT_N);
++
++    checkCudaErrors(cudaDeviceSynchronize());
+ 
+-    if (sumRef > 1E-5)
++    gettimeofday(&tv_start, NULL);
++    sprintf(filepath, "%s/callValue.uvm.mem", folder);
++	if ((fp = fopen(filepath, "wb")) == 0)
+     {
+-        printf("L1 norm: %E\n", errorVal = sumDelta / sumRef);
++        fprintf(stderr, "%s was not opened\n", filepath);
++        exit(EXIT_FAILURE);
+     }
+-    else
++
++    if (fwrite(callValueGPU, OPT_N * sizeof(real), 1, fp) != 1)
+     {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
++        fprintf(stderr, "Cannot write to %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
++    fsync(fileno(fp));
++	fclose(fp);	
++    gettimeofday(&tv_end, NULL);
+ 
+-    printf("Shutting down...\n");
+-
+-    sdkDeleteTimer(&hTimer);
++    writefile_time += time_diff(tv_start, tv_end);
+ 
+-    printf("\nNOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.\n\n");
++    checkCudaErrors(cudaFree(callValueGPU));
++    checkCudaErrors(cudaFree(optionData));
+ 
+-    if (errorVal > 5e-4)
+-    {
+-        printf("Test failed!\n");
+-        exit(EXIT_FAILURE);
+-    }
++    printf("==> header: kernel_time (ms),writefile_time (ms),readfile_time (ms)\n");
++    printf("==> data: %f,%f,%f\n", kernel_time, writefile_time, readfile_time);
+ 
+-    printf("Test passed\n");
+-    exit(EXIT_SUCCESS);
++    return 0;
+ }
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_gold.cpp uvm/binomialOptions_gold.cpp
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_gold.cpp	2018-08-16 14:37:03.490764224 +0900
++++ uvm/binomialOptions_gold.cpp	1970-01-01 09:00:00.000000000 +0900
+@@ -1,124 +0,0 @@
+-/*
+- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+- *
+- * Please refer to the NVIDIA end user license agreement (EULA) associated
+- * with this source code for terms and conditions that govern your use of
+- * this software. Any use, reproduction, disclosure, or distribution of
+- * this software and related documentation outside the terms of the EULA
+- * is strictly prohibited.
+- *
+- */
+-
+-
+-
+-#include <stdio.h>
+-#include <math.h>
+-#include "binomialOptions_common.h"
+-#include "realtype.h"
+-
+-
+-
+-///////////////////////////////////////////////////////////////////////////////
+-// Polynomial approximation of cumulative normal distribution function
+-///////////////////////////////////////////////////////////////////////////////
+-static real CND(real d)
+-{
+-    const real       A1 = 0.31938153;
+-    const real       A2 = -0.356563782;
+-    const real       A3 = 1.781477937;
+-    const real       A4 = -1.821255978;
+-    const real       A5 = 1.330274429;
+-    const real RSQRT2PI = 0.39894228040143267793994605993438;
+-
+-    real
+-    K = 1.0 / (1.0 + 0.2316419 * fabs(d));
+-
+-    real
+-    cnd = RSQRT2PI * exp(- 0.5 * d * d) *
+-          (K * (A1 + K * (A2 + K * (A3 + K * (A4 + K * A5)))));
+-
+-    if (d > 0)
+-        cnd = 1.0 - cnd;
+-
+-    return cnd;
+-}
+-
+-extern "C" void BlackScholesCall(
+-    real &callResult,
+-    TOptionData optionData
+-)
+-{
+-    real S = optionData.S;
+-    real X = optionData.X;
+-    real T = optionData.T;
+-    real R = optionData.R;
+-    real V = optionData.V;
+-
+-    real sqrtT = sqrt(T);
+-    real    d1 = (log(S / X) + (R + (real)0.5 * V * V) * T) / (V * sqrtT);
+-    real    d2 = d1 - V * sqrtT;
+-    real CNDD1 = CND(d1);
+-    real CNDD2 = CND(d2);
+-
+-    //Calculate Call and Put simultaneously
+-    real expRT = exp(- R * T);
+-    callResult   = (real)(S * CNDD1 - X * expRT * CNDD2);
+-}
+-
+-
+-
+-////////////////////////////////////////////////////////////////////////////////
+-// Process an array of OptN options on CPU
+-// Note that CPU code is for correctness testing only and not for benchmarking.
+-////////////////////////////////////////////////////////////////////////////////
+-static real expiryCallValue(real S, real X, real vDt, int i)
+-{
+-    real d = S * exp(vDt * (real)(2 * i - NUM_STEPS)) - X;
+-    return (d > (real)0) ? d : (real)0;
+-}
+-
+-extern "C" void binomialOptionsCPU(
+-    real &callResult,
+-    TOptionData optionData
+-)
+-{
+-    static real Call[NUM_STEPS + 1];
+-
+-    const real       S = optionData.S;
+-    const real       X = optionData.X;
+-    const real       T = optionData.T;
+-    const real       R = optionData.R;
+-    const real       V = optionData.V;
+-
+-    const real      dt = T / (real)NUM_STEPS;
+-    const real     vDt = V * sqrt(dt);
+-    const real     rDt = R * dt;
+-    //Per-step interest and discount factors
+-    const real      If = exp(rDt);
+-    const real      Df = exp(-rDt);
+-    //Values and pseudoprobabilities of upward and downward moves
+-    const real       u = exp(vDt);
+-    const real       d = exp(-vDt);
+-    const real      pu = (If - d) / (u - d);
+-    const real      pd = 1.0 - pu;
+-    const real  puByDf = pu * Df;
+-    const real  pdByDf = pd * Df;
+-
+-    ///////////////////////////////////////////////////////////////////////
+-    // Compute values at expiration date:
+-    // call option value at period end is V(T) = S(T) - X
+-    // if S(T) is greater than X, or zero otherwise.
+-    // The computation is similar for put options.
+-    ///////////////////////////////////////////////////////////////////////
+-    for (int i = 0; i <= NUM_STEPS; i++)
+-        Call[i] = expiryCallValue(S, X, vDt, i);
+-
+-    ////////////////////////////////////////////////////////////////////////
+-    // Walk backwards up binomial tree
+-    ////////////////////////////////////////////////////////////////////////
+-    for (int i = NUM_STEPS; i > 0; i--)
+-        for (int j = 0; j <= i - 1; j++)
+-            Call[j] = puByDf * Call[j + 1] + pdByDf * Call[j];
+-
+-    callResult = (real)Call[0];
+-}
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_kernel.cu uvm/binomialOptions_kernel.cu
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_kernel.cu	2018-08-16 14:37:03.490764224 +0900
++++ uvm/binomialOptions_kernel.cu	2018-08-22 22:32:20.693910063 +0900
+@@ -14,28 +14,14 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ #include <stdio.h>
+ #include <stdlib.h>
+-#include <cooperative_groups.h>
+-
+-namespace cg = cooperative_groups;
+-
+ #include <helper_cuda.h>
++#include <sys/time.h>
+ #include "binomialOptions_common.h"
+ #include "realtype.h"
+ 
++#define MIN(x, y) (x < y ? x : y)
+ 
+-//Preprocessed input option data
+-typedef struct
+-{
+-    real S;
+-    real X;
+-    real vDt;
+-    real puByDf;
+-    real pdByDf;
+-} __TOptionData;
+-static __constant__ __TOptionData d_OptionData[MAX_OPTIONS];
+-static __device__           real d_CallValue[MAX_OPTIONS];
+-
+-
++extern double kernel_time;       // in ms
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ // Overloaded shortcut functions for different precision modes
+@@ -64,18 +50,17 @@
+ #error Bad constants
+ #endif
+ 
+-__global__ void binomialOptionsKernel()
++__global__ void binomialOptionsKernel(__TOptionData *d_OptionData, real *d_CallValue, long start_idx)
+ {
+-    // Handle to thread block group
+-    cg::thread_block cta = cg::this_thread_block();
+     __shared__ real call_exchange[THREADBLOCK_SIZE + 1];
+ 
+     const int     tid = threadIdx.x;
+-    const real      S = d_OptionData[blockIdx.x].S;
+-    const real      X = d_OptionData[blockIdx.x].X;
+-    const real    vDt = d_OptionData[blockIdx.x].vDt;
+-    const real puByDf = d_OptionData[blockIdx.x].puByDf;
+-    const real pdByDf = d_OptionData[blockIdx.x].pdByDf;
++    const long    idx = (long)blockIdx.x + start_idx;
++    const real      S = d_OptionData[idx].S;
++    const real      X = d_OptionData[idx].X;
++    const real    vDt = d_OptionData[idx].vDt;
++    const real puByDf = d_OptionData[idx].puByDf;
++    const real pdByDf = d_OptionData[idx].pdByDf;
+ 
+     real call[ELEMS_PER_THREAD + 1];
+     #pragma unroll
+@@ -91,9 +76,9 @@
+     for(int i = NUM_STEPS; i > 0; --i)
+     {
+         call_exchange[tid] = call[0];
+-        cg::sync(cta);
++        __syncthreads();
+         call[ELEMS_PER_THREAD] = call_exchange[tid + 1];
+-        cg::sync(cta);
++        __syncthreads();
+ 
+         if (i > final_it)
+         {
+@@ -105,7 +90,7 @@
+ 
+     if (tid == 0)
+     {
+-        d_CallValue[blockIdx.x] = call[0];
++        d_CallValue[idx] = call[0];
+     }
+ }
+ 
+@@ -114,41 +99,24 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ extern "C" void binomialOptionsGPU(
+     real *callValue,
+-    TOptionData  *optionData,
+-    int optN
++    __TOptionData  *h_OptionData,
++    long optN
+ )
+ {
+-    __TOptionData h_OptionData[MAX_OPTIONS];
++    struct timeval tv_start, tv_end;
++
++    const long max_grid = 2147483647;
++    long start_idx = 0;
+ 
+-    for (int i = 0; i < optN; i++)
++    gettimeofday(&tv_start, NULL);
++    while (start_idx < optN)
+     {
+-        const real      T = optionData[i].T;
+-        const real      R = optionData[i].R;
+-        const real      V = optionData[i].V;
+-
+-        const real     dt = T / (real)NUM_STEPS;
+-        const real    vDt = V * sqrt(dt);
+-        const real    rDt = R * dt;
+-        //Per-step interest and discount factors
+-        const real     If = exp(rDt);
+-        const real     Df = exp(-rDt);
+-        //Values and pseudoprobabilities of upward and downward moves
+-        const real      u = exp(vDt);
+-        const real      d = exp(-vDt);
+-        const real     pu = (If - d) / (u - d);
+-        const real     pd = (real)1.0 - pu;
+-        const real puByDf = pu * Df;
+-        const real pdByDf = pd * Df;
+-
+-        h_OptionData[i].S      = (real)optionData[i].S;
+-        h_OptionData[i].X      = (real)optionData[i].X;
+-        h_OptionData[i].vDt    = (real)vDt;
+-        h_OptionData[i].puByDf = (real)puByDf;
+-        h_OptionData[i].pdByDf = (real)pdByDf;
++        long grid = MIN(max_grid, optN - start_idx);
++        binomialOptionsKernel<<<grid, THREADBLOCK_SIZE>>>(h_OptionData, callValue, start_idx);
++        start_idx += grid;
+     }
+-
+-    checkCudaErrors(cudaMemcpyToSymbol(d_OptionData, h_OptionData, optN * sizeof(__TOptionData)));
+-    binomialOptionsKernel<<<optN, THREADBLOCK_SIZE>>>();
++    checkCudaErrors(cudaDeviceSynchronize());
+     getLastCudaError("binomialOptionsKernel() execution failed.\n");
+-    checkCudaErrors(cudaMemcpyFromSymbol(callValue, d_CallValue, optN *sizeof(real)));
++    gettimeofday(&tv_end, NULL);
++    kernel_time += time_diff(tv_start, tv_end);
+ }
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/Makefile uvm/Makefile
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/Makefile	2018-08-16 14:37:03.827764119 +0900
++++ uvm/Makefile	2018-08-22 22:32:20.693910063 +0900
+@@ -182,11 +182,6 @@
+     endif
+ endif
+ 
+-ifeq ($(TARGET_OS),qnx)
+-    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+-    LDFLAGS += -lsocket
+-endif
+-
+ # Debug build flags
+ ifeq ($(dbg),1)
+       NVCCFLAGS += -g -G
+@@ -209,13 +204,13 @@
+ ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
+ 
+ # Common includes and paths for CUDA
+-INCLUDES  := -I../../common/inc
++INCLUDES  := -I../common/inc
+ LIBRARIES :=
+ 
+ ################################################################################
+ 
+ # Gencode arguments
+-SMS ?= 30 35 37 50 52 60 70
++SMS ?= 60
+ 
+ ifeq ($(SMS),)
+ $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
+@@ -254,22 +249,19 @@
+ binomialOptions.o:binomialOptions.cpp
+ 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+ 
+-binomialOptions_gold.o:binomialOptions_gold.cpp
+-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+-
+ binomialOptions_kernel.o:binomialOptions_kernel.cu
+ 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+ 
+-binomialOptions: binomialOptions.o binomialOptions_gold.o binomialOptions_kernel.o
++binomialOptions: binomialOptions.o binomialOptions_kernel.o
+ 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+-	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+-	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
++	$(EXEC) mkdir -p bin/
++	$(EXEC) mv $@ bin/
+ 
+ run: build
+-	$(EXEC) ./binomialOptions
++	$(EXEC) ./bin/binomialOptions
+ 
+ clean:
+ 	rm -f binomialOptions binomialOptions.o binomialOptions_gold.o binomialOptions_kernel.o
+-	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/binomialOptions
++	rm -rf bin/
+ 
+ clobber: clean
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/NsightEclipse.xml uvm/NsightEclipse.xml
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/NsightEclipse.xml	2018-08-16 14:37:03.490764224 +0900
++++ uvm/NsightEclipse.xml	2018-08-22 22:32:20.693910063 +0900
+@@ -28,13 +28,13 @@
+     <scope>1:CUDA Advanced Topics</scope>
+     <scope>3:Computational Finance</scope>
+   </scopes>
++  <sm-arch>sm20</sm-arch>
+   <sm-arch>sm30</sm-arch>
+   <sm-arch>sm35</sm-arch>
+   <sm-arch>sm37</sm-arch>
+   <sm-arch>sm50</sm-arch>
+   <sm-arch>sm52</sm-arch>
+   <sm-arch>sm60</sm-arch>
+-  <sm-arch>sm70</sm-arch>
+   <supported_envs>
+     <env>
+       <arch>x86_64</arch>

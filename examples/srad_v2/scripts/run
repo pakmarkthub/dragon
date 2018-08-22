@@ -77,7 +77,7 @@ def load_nvmgpu_driver(use_old_driver):
     p = subprocess.Popen([exec_path,], cwd = path)
     retcode = p.wait()
     if retcode != 0:
-        raise Exception("Cannot load nvmgpu driver")
+        raise Exception("Cannot load DRAGON driver")
 
 def create_dfolder_generator(args):
     if args.ftype == 'item':

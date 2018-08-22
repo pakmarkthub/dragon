@@ -1,0 +1,374 @@
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_common.h generator/binomialOptions_common.h
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_common.h	2018-08-16 14:37:03.489764225 +0900
++++ generator/binomialOptions_common.h	2018-08-22 22:32:20.687910065 +0900
+@@ -34,9 +34,5 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ //Number of time steps
+ #define   NUM_STEPS 2048
+-//Max option batch size
+-#define MAX_OPTIONS 1024
+-
+-
+ 
+ #endif
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions.cpp generator/binomialOptions.cpp
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions.cpp	2018-08-16 14:37:03.490764224 +0900
++++ generator/binomialOptions.cpp	2018-08-22 22:32:20.687910065 +0900
+@@ -16,12 +16,16 @@
+  */
+ 
+ 
+-
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <math.h>
+ #include <cuda_runtime.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <unistd.h>
+ 
+ #include <helper_functions.h>
+ #include <helper_cuda.h>
+@@ -38,24 +42,6 @@
+ );
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+-// Process single option on CPU
+-// Note that CPU code is for correctness testing only and not for benchmarking.
+-////////////////////////////////////////////////////////////////////////////////
+-extern "C" void binomialOptionsCPU(
+-    real &callResult,
+-    TOptionData optionData
+-);
+-
+-////////////////////////////////////////////////////////////////////////////////
+-// Process an array of OptN options on GPU
+-////////////////////////////////////////////////////////////////////////////////
+-extern "C" void binomialOptionsGPU(
+-    real *callValue,
+-    TOptionData  *optionData,
+-    int optN
+-);
+-
+-////////////////////////////////////////////////////////////////////////////////
+ // Helper function, returning uniformly distributed
+ // random float in [low, high] range
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -72,132 +58,91 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ int main(int argc, char **argv)
+ {
+-    printf("[%s] - Starting...\n", argv[0]);
+-
+-    int devID = findCudaDevice(argc, (const char **)argv);
+-
+-    const int OPT_N = MAX_OPTIONS;
+-
+-    TOptionData optionData[MAX_OPTIONS];
+-    real
+-    callValueBS[MAX_OPTIONS],
+-                callValueGPU[MAX_OPTIONS],
+-                callValueCPU[MAX_OPTIONS];
+-
+-    real
+-    sumDelta, sumRef, gpuTime, errorVal;
+-
+-    StopWatchInterface *hTimer = NULL;
+-    int i;
+-
+-    sdkCreateTimer(&hTimer);
+-
+-    printf("Generating input data...\n");
+-    //Generate options set
+-    srand(123);
+-
+-    for (i = 0; i < OPT_N; i++)
++    if (argc != 3)
+     {
+-        optionData[i].S = randData(5.0f, 30.0f);
+-        optionData[i].X = randData(1.0f, 100.0f);
+-        optionData[i].T = randData(0.25f, 10.0f);
+-        optionData[i].R = 0.06f;
+-        optionData[i].V = 0.10f;
+-        BlackScholesCall(callValueBS[i], optionData[i]);
+-    }
+-
+-    printf("Running GPU binomial tree...\n");
+-    checkCudaErrors(cudaDeviceSynchronize());
+-    sdkResetTimer(&hTimer);
+-    sdkStartTimer(&hTimer);
+-
+-    binomialOptionsGPU(callValueGPU, optionData, OPT_N);
+-
+-    checkCudaErrors(cudaDeviceSynchronize());
+-    sdkStopTimer(&hTimer);
+-    gpuTime = sdkGetTimerValue(&hTimer);
+-    printf("Options count            : %i     \n", OPT_N);
+-    printf("Time steps               : %i     \n", NUM_STEPS);
+-    printf("binomialOptionsGPU() time: %f msec\n", gpuTime);
+-    printf("Options per second       : %f     \n", OPT_N / (gpuTime * 0.001));
+-
+-    printf("Running CPU binomial tree...\n");
+-
+-    for (i = 0; i < OPT_N; i++)
+-    {
+-        binomialOptionsCPU(callValueCPU[i], optionData[i]);
++        fprintf(stderr, "Usage: %s <OPT_N> <outfile>\n", argv[0]);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    printf("Comparing the results...\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
+-    printf("GPU binomial vs. Black-Scholes\n");
+-
+-    for (i = 0; i < OPT_N; i++)
++    const long OPT_N = atol(argv[1]);
++    if (OPT_N <= 0)
+     {
+-        sumDelta += fabs(callValueBS[i] - callValueGPU[i]);
+-        sumRef += fabs(callValueBS[i]);
++        fprintf(stderr, "OPT_N has to be greater than 0, but we got %ld\n", OPT_N);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    if (sumRef >1E-5)
+-    {
+-        printf("L1 norm: %E\n", (double)(sumDelta / sumRef));
+-    }
+-    else
+-    {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
+-    }
++    char *filepath = argv[2];
+ 
+-    printf("CPU binomial vs. Black-Scholes\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
++    int fd;
++    TOptionData *optionData;
+ 
+-    for (i = 0; i < OPT_N; i++)
++    if ((fd = open(filepath, O_LARGEFILE | O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP)) < 0)
+     {
+-        sumDelta += fabs(callValueBS[i]- callValueCPU[i]);
+-        sumRef += fabs(callValueBS[i]);
++        fprintf(stderr, "Cannot open file %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
+-
+-    if (sumRef >1E-5)
++    if (ftruncate(fd, sizeof(TOptionData) * OPT_N) != 0)
+     {
+-        printf("L1 norm: %E\n", sumDelta / sumRef);
++        fprintf(stderr, "Cannot truncate file %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
+-    else
++    if ((optionData = (TOptionData *)mmap(NULL, sizeof(TOptionData) * OPT_N, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_NORESERVE, fd, 0)) == MAP_FAILED)
+     {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
++        fprintf(stderr, "Cannot mmap %s\n", filepath);
++        exit(EXIT_FAILURE);
+     }
+ 
+-    printf("CPU binomial vs. GPU binomial\n");
+-    sumDelta = 0;
+-    sumRef   = 0;
++    printf("Generating input data...\n");
++    //Generate options set
++    srand(123);
+ 
+-    for (i = 0; i < OPT_N; i++)
++    for (long i = 0; i < OPT_N; i++)
+     {
+-        sumDelta += fabs(callValueGPU[i] - callValueCPU[i]);
+-        sumRef += callValueCPU[i];
+-    }
++        optionData[i].S = randData(5.0f, 30.0f);
++        optionData[i].X = randData(1.0f, 100.0f);
++        optionData[i].T = randData(0.25f, 10.0f);
++        optionData[i].R = 0.06f;
++        optionData[i].V = 0.10f;
+ 
+-    if (sumRef > 1E-5)
+-    {
+-        printf("L1 norm: %E\n", errorVal = sumDelta / sumRef);
++        const real      T = optionData[i].T;
++        const real      R = optionData[i].R;
++        const real      V = optionData[i].V;
++
++        const real     dt = T / (real)NUM_STEPS;
++        const real    vDt = V * sqrt(dt);
++        const real    rDt = R * dt;
++        //Per-step interest and discount factors
++        const real     If = exp(rDt);
++        const real     Df = exp(-rDt);
++        //Values and pseudoprobabilities of upward and downward moves
++        const real      u = exp(vDt);
++        const real      d = exp(-vDt);
++        const real     pu = (If - d) / (u - d);
++        const real     pd = (real)1.0 - pu;
++        const real puByDf = pu * Df;
++        const real pdByDf = pd * Df;
++
++        optionData[i].S = (real)optionData[i].S;
++        optionData[i].X = (real)optionData[i].X;
++        optionData[i].T = (real)vDt;
++        optionData[i].R = (real)puByDf;
++        optionData[i].V = (real)pdByDf;
+     }
+-    else
++
++    if (msync(optionData, sizeof(TOptionData) * OPT_N, MS_SYNC) != 0)
+     {
+-        printf("Avg. diff: %E\n", (double)(sumDelta / (real)OPT_N));
++        fprintf(stderr, "Cannot msync %s\n", filepath);
++        perror("msync");
++        exit(EXIT_FAILURE);
+     }
+-
+-    printf("Shutting down...\n");
+-
+-    sdkDeleteTimer(&hTimer);
+-
+-    printf("\nNOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.\n\n");
+-
+-    if (errorVal > 5e-4)
++    if (munmap(optionData, sizeof(TOptionData) * OPT_N) != 0)
+     {
+-        printf("Test failed!\n");
++        fprintf(stderr, "Cannot munmap %s\n", filepath);
++        perror("munmap");
+         exit(EXIT_FAILURE);
+     }
++    fsync(fd);
++    close(fd);
+ 
+-    printf("Test passed\n");
+-    exit(EXIT_SUCCESS);
++    return 0;
+ }
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_kernel.cu generator/binomialOptions_kernel.cu
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/binomialOptions_kernel.cu	2018-08-16 14:37:03.490764224 +0900
++++ generator/binomialOptions_kernel.cu	2018-08-22 22:32:20.687910065 +0900
+@@ -14,10 +14,6 @@
+ ////////////////////////////////////////////////////////////////////////////////
+ #include <stdio.h>
+ #include <stdlib.h>
+-#include <cooperative_groups.h>
+-
+-namespace cg = cooperative_groups;
+-
+ #include <helper_cuda.h>
+ #include "binomialOptions_common.h"
+ #include "realtype.h"
+@@ -66,8 +62,6 @@
+ 
+ __global__ void binomialOptionsKernel()
+ {
+-    // Handle to thread block group
+-    cg::thread_block cta = cg::this_thread_block();
+     __shared__ real call_exchange[THREADBLOCK_SIZE + 1];
+ 
+     const int     tid = threadIdx.x;
+@@ -91,9 +85,9 @@
+     for(int i = NUM_STEPS; i > 0; --i)
+     {
+         call_exchange[tid] = call[0];
+-        cg::sync(cta);
++        __syncthreads();
+         call[ELEMS_PER_THREAD] = call_exchange[tid + 1];
+-        cg::sync(cta);
++        __syncthreads();
+ 
+         if (i > final_it)
+         {
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/Makefile generator/Makefile
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/Makefile	2018-08-16 14:37:03.827764119 +0900
++++ generator/Makefile	2018-08-22 22:32:20.687910065 +0900
+@@ -34,7 +34,7 @@
+ ################################################################################
+ 
+ # Location of the CUDA Toolkit
+-CUDA_PATH ?= "/usr/local/cuda-9.0"
++CUDA_PATH ?= /usr/local/cuda-9.0
+ 
+ ##############################
+ # start deprecated interface #
+@@ -182,11 +182,6 @@
+     endif
+ endif
+ 
+-ifeq ($(TARGET_OS),qnx)
+-    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+-    LDFLAGS += -lsocket
+-endif
+-
+ # Debug build flags
+ ifeq ($(dbg),1)
+       NVCCFLAGS += -g -G
+@@ -209,13 +204,13 @@
+ ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
+ 
+ # Common includes and paths for CUDA
+-INCLUDES  := -I../../common/inc
++INCLUDES  := -I../common/inc
+ LIBRARIES :=
+ 
+ ################################################################################
+ 
+ # Gencode arguments
+-SMS ?= 30 35 37 50 52 60 70
++SMS ?= 60
+ 
+ ifeq ($(SMS),)
+ $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
+@@ -254,22 +249,16 @@
+ binomialOptions.o:binomialOptions.cpp
+ 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+ 
+-binomialOptions_gold.o:binomialOptions_gold.cpp
+-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+-
+-binomialOptions_kernel.o:binomialOptions_kernel.cu
+-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+-
+-binomialOptions: binomialOptions.o binomialOptions_gold.o binomialOptions_kernel.o
++binomialOptions: binomialOptions.o 
+ 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+-	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+-	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
++	$(EXEC) mkdir -p bin/
++	$(EXEC) mv $@ bin/
+ 
+ run: build
+ 	$(EXEC) ./binomialOptions
+ 
+ clean:
+ 	rm -f binomialOptions binomialOptions.o binomialOptions_gold.o binomialOptions_kernel.o
+-	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/binomialOptions
++	rm -rf bin/
+ 
+ clobber: clean
+diff -Naru /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/NsightEclipse.xml generator/NsightEclipse.xml
+--- /usr/local/cuda-9.0/samples/4_Finance/binomialOptions/NsightEclipse.xml	2018-08-16 14:37:03.490764224 +0900
++++ generator/NsightEclipse.xml	2018-08-22 22:32:20.687910065 +0900
+@@ -28,13 +28,13 @@
+     <scope>1:CUDA Advanced Topics</scope>
+     <scope>3:Computational Finance</scope>
+   </scopes>
++  <sm-arch>sm20</sm-arch>
+   <sm-arch>sm30</sm-arch>
+   <sm-arch>sm35</sm-arch>
+   <sm-arch>sm37</sm-arch>
+   <sm-arch>sm50</sm-arch>
+   <sm-arch>sm52</sm-arch>
+   <sm-arch>sm60</sm-arch>
+-  <sm-arch>sm70</sm-arch>
+   <supported_envs>
+     <env>
+       <arch>x86_64</arch>

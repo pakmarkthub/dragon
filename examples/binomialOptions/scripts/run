@@ -16,7 +16,7 @@ def type_folder(path):
 
 def parseargs():
     parser = argparse.ArgumentParser(
-        description = 'backprop run benchmark'
+        description = 'binomialOptions run benchmark'
     )
 
     parser.add_argument(
@@ -60,7 +60,6 @@ def parseargs():
     return parser.parse_args()
 
 def load_original_driver():
-    print('Loading original NVIDIA driver ...')
     subprocess.call([
         'rmmod',
         'nvidia-uvm',
@@ -154,6 +153,15 @@ def validate_output(args, filepath):
     args.ofile.flush()
     os.fsync(args.ofile.fileno())
 
+def copy_file_template(prog, folder, fname):
+    src = os.path.join(folder, '{}.mem'.format(fname))
+    dst = os.path.join(folder, '{}.{}.mem'.format(fname, prog))
+
+    print("Copying {} to {} ...".format(src, dst))
+    shutil.copy(src, dst)
+
+    return dst
+
 def run_cudamemcpy(args):
     load_original_driver()
     prog = os.path.join(CWD, '../programs/bin/cudamemcpy')
@@ -161,18 +169,9 @@ def run_cudamemcpy(args):
         for t in range(args.repeat):
             print("Benchmarking with cudamemcpy ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
             write_script_header(args, t, 'cudamemcpy', folder)
-            print("Copying input_weights.mem to input_weights.cudamemcpy.mem ...")
-            filepath_input_weights = os.path.join(folder, 'input_weights.cudamemcpy.mem')
-            shutil.copy(
-                os.path.join(folder, 'input_weights.mem'),
-                filepath_input_weights
-            )
-            print("Copying hidden_weights.mem to hidden_weights.cudamemcpy.mem ...")
-            filepath_hidden_weights = os.path.join(folder, 'hidden_weights.cudamemcpy.mem')
-            shutil.copy(
-                os.path.join(folder, 'hidden_weights.mem'),
-                filepath_hidden_weights
-            )
+            files_to_be_validated = [
+                os.path.join(folder, 'callValue.cudamemcpy.mem'),
+            ]
             clear_cache()
             print("Running the program ...")
             retcode = subprocess.call(
@@ -181,8 +180,8 @@ def run_cudamemcpy(args):
                 stderr = args.efile
             )
             if retcode == 0:
-                validate_output(args, filepath_input_weights)
-                validate_output(args, filepath_hidden_weights)
+                for path in files_to_be_validated:
+                    validate_output(args, path)
             write_script_footer(args, t, 'cudamemcpy', folder, retcode)
             if retcode != 0:
                 print("Execution failed!! Break")
@@ -195,18 +194,9 @@ def run_uvm(args):
         for t in range(args.repeat):
             print("Benchmarking with uvm ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
             write_script_header(args, t, 'uvm', folder)
-            print("Copying input_weights.mem to input_weights.uvm.mem ...")
-            filepath_input_weights = os.path.join(folder, 'input_weights.uvm.mem')
-            shutil.copy(
-                os.path.join(folder, 'input_weights.mem'),
-                filepath_input_weights
-            )
-            print("Copying hidden_weights.mem to hidden_weights.uvm.mem ...")
-            filepath_hidden_weights = os.path.join(folder, 'hidden_weights.uvm.mem')
-            shutil.copy(
-                os.path.join(folder, 'hidden_weights.mem'),
-                filepath_hidden_weights
-            )
+            files_to_be_validated = [
+                os.path.join(folder, 'callValue.uvm.mem'),
+            ]
             clear_cache()
             print("Running the program ...")
             retcode = subprocess.call(
@@ -215,8 +205,8 @@ def run_uvm(args):
                 stderr = args.efile
             )
             if retcode == 0:
-                validate_output(args, filepath_input_weights)
-                validate_output(args, filepath_hidden_weights)
+                for path in files_to_be_validated:
+                    validate_output(args, path)
             write_script_footer(args, t, 'uvm', folder, retcode)
             if retcode != 0:
                 print("Execution failed!! Break")
@@ -229,18 +219,9 @@ def run_hostreg(args):
         for t in range(args.repeat):
             print("Benchmarking with hostreg ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
             write_script_header(args, t, 'hostreg', folder)
-            print("Copying input_weights.mem to input_weights.hostreg.mem ...")
-            filepath_input_weights = os.path.join(folder, 'input_weights.hostreg.mem')
-            shutil.copy(
-                os.path.join(folder, 'input_weights.mem'),
-                filepath_input_weights
-            )
-            print("Copying hidden_weights.mem to hidden_weights.hostreg.mem ...")
-            filepath_hidden_weights = os.path.join(folder, 'hidden_weights.hostreg.mem')
-            shutil.copy(
-                os.path.join(folder, 'hidden_weights.mem'),
-                filepath_hidden_weights
-            )
+            files_to_be_validated = [
+                os.path.join(folder, 'callValue.hostreg.mem'),
+            ]
             clear_cache()
             print("Running the program ...")
             retcode = subprocess.call(
@@ -249,8 +230,8 @@ def run_hostreg(args):
                 stderr = args.efile
             )
             if retcode == 0:
-                validate_output(args, filepath_input_weights)
-                validate_output(args, filepath_hidden_weights)
+                for path in files_to_be_validated:
+                    validate_output(args, path)
             write_script_footer(args, t, 'hostreg', folder, retcode)
             if retcode != 0:
                 print("Execution failed!! Break")
@@ -263,18 +244,9 @@ def run_nvmgpu(args):
         for t in range(args.repeat):
             print("Benchmarking with nvmgpu ({:d} / {:d}) {:s} ...".format(t + 1, args.repeat, folder))
             write_script_header(args, t, 'nvmgpu', folder)
-            print("Copying input_weights.mem to input_weights.nvmgpu.mem ...")
-            filepath_input_weights = os.path.join(folder, 'input_weights.nvmgpu.mem')
-            shutil.copy(
-                os.path.join(folder, 'input_weights.mem'),
-                filepath_input_weights
-            )
-            print("Copying hidden_weights.mem to hidden_weights.nvmgpu.mem ...")
-            filepath_hidden_weights = os.path.join(folder, 'hidden_weights.nvmgpu.mem')
-            shutil.copy(
-                os.path.join(folder, 'hidden_weights.mem'),
-                filepath_hidden_weights
-            )
+            files_to_be_validated = [
+                os.path.join(folder, 'callValue.nvmgpu.mem'),
+            ]
             clear_cache()
             clear_dmesg()
             print("Running the program ...")
@@ -286,8 +258,8 @@ def run_nvmgpu(args):
             dump_dmesg(args)
             sync_fs()
             if retcode == 0:
-                validate_output(args, filepath_input_weights)
-                validate_output(args, filepath_hidden_weights)
+                for path in files_to_be_validated:
+                    validate_output(args, path)
             write_script_footer(args, t, 'nvmgpu', folder, retcode)
             if retcode != 0:
                 print("Execution failed!! Break")
