@@ -31,8 +31,21 @@ in the paper.
 * Python2.7 or above
 * CUDA version 9.0 or above
 * DRAGON library and driver
+* [gpufs](https://github.com/gpufs/gpufs)
 
 ### Compiling
+
+1. For *binomialOptions*, *BlackScholes*, and *vectorAdd*, go to the *scripts*
+folder inside those application folder. Run the *prepare-programs* script. You
+need to specify the CUDA samples location. This script supports only the CUDA
+sample applications from CUDA version 9.0.
+
+```
+cd <application>/scripts
+./prepare-programs /usr/local/cuda-9.0/samples
+```
+
+2. For other applications
 
 ```
 cd <application>/programs
