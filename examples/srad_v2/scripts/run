@@ -73,7 +73,7 @@ def load_original_driver():
 def load_nvmgpu_driver(use_old_driver):
     print('Loading DRAGON driver ...')
     path = os.path.join(CWD, '../../../scripts/')
-    exec_path = os.path.join(path, 'reinsert-mod.sh')
+    exec_path = os.path.join(path, 'reinsert-mod')
     p = subprocess.Popen([exec_path,], cwd = path)
     retcode = p.wait()
     if retcode != 0:
@@ -122,7 +122,7 @@ def write_script_footer(args, step, prog, dfolder, retcode):
 def clear_cache():
     print("Clearing page cache ...")
     subprocess.check_call([
-        os.path.join(CWD, '../../../scripts/drop-caches.sh'),
+        os.path.join(CWD, '../../../scripts/drop-caches'),
     ])
 
 def clear_dmesg():

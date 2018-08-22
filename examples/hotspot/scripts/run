@@ -129,7 +129,7 @@ def write_script_footer(args, step, prog, dfolder, retcode):
 def clear_cache():
     print("Clearing page cache ...")
     subprocess.check_call([
-        os.path.join(CWD, '../../../scripts/drop-caches.sh'),
+        os.path.join(CWD, '../../../scripts/drop-caches'),
     ])
 
 def clear_dmesg():

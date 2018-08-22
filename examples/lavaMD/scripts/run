@@ -73,7 +73,7 @@ def load_original_driver():
 def load_nvmgpu_driver():
     print('Loading DRAGON driver ...')
     path = os.path.join(CWD, '../../../scripts/')
-    exec_path = os.path.join(path, 'reinsert-mod.sh')
+    exec_path = os.path.join(path, 'reinsert-mod')
     p = subprocess.Popen([exec_path,], cwd = path)
     retcode = p.wait()
     if retcode != 0:
