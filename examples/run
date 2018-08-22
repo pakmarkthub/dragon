@@ -36,4 +36,20 @@ do
         echo "See ${rfolder}/results.out and ${rfolder}/results.err for more information"
         exit ${err}
     fi
+
+    if [[ ${bench} == "hotspot" || ${bench} == "vectorAdd" ]]
+    then
+        echo "Running the readahead disable experiment for ${bench}"
+        ( set -x; DRAGON_READAHEAD_TYPE=disable ./${bench}/scripts/run --prog nvmgpu --repeat 1 ${dfolder} container ${rfolder}/result-nvmgpu-rh-disable.out --efile ${rfolder}/result-nvmgpu-rh-disable.err )
+        err=$?
+        if [[ ${err} == 0 ]]
+        then
+            echo "End ${bench} successfully ..."
+            ( set -x; rm -rf ${dfolder} )
+        else
+            echo "End ${bench} with failure. Stopping the script ..."
+            echo "See ${rfolder}/results.out and ${rfolder}/results.err for more information"
+            exit ${err}
+        fi
+    fi
 done

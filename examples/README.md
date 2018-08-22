@@ -29,6 +29,9 @@ in the paper.
 ### Prerequisites
 
 * Python2.7 or above
+* matplotlib
+* numpy
+* scipy
 * CUDA version 9.0 or above
 * DRAGON library and driver
 * [gpufs](https://github.com/gpufs/gpufs)
@@ -52,9 +55,9 @@ cd <application>/programs
 make -j
 ```
 
-### How to use
+### How to run an application
 
-This section provides steps for reproducing the results shown in our paper.
+This section provides steps for running an example application.
 
 1. Go to the *scripts* folder of the application you want to run.
 
@@ -83,4 +86,58 @@ driver and the original NVIDIA driver.
 sudo su
 ../../../scripts/activate-dragon
 ./run --repeat 1 output.log
+```
+
+## How to reproduce the results in the paper
+
+This section gives you steps for running all example applications, collecting
+and converting results, and generating the graphs.
+
+1. Prepare your node. Make sure that your host memory capacity is slightly above
+64 GiB and the swap space is disabled. We recommend you to set the host memory
+capacity to around 80 GiB in order to leave room for other processes (daemon,
+ssh, etc.). The following websites provide guideline on how to do them in
+software.
+
+* https://stackoverflow.com/questions/13484016/setting-limit-to-total-physical-memory-available-in-linux
+* https://serverfault.com/questions/684771/best-way-to-disable-swap-in-linux
+
+2. Make sure that your NVMe device is formatted with *ext4* and the device's
+free space is more than 512 GiB.
+
+3. Run all experiments. We provide a script to automatically do it for you. This
+step may take several hours to a day. You may want to run execute it using
+*screen*. Also, this script needs the *root* privilege to run.
+
+```
+sudo su
+cd <dragon-root>/scripts
+./activate-dragon
+cd <dragon-root>/examples
+./run <location-on-your-nvme>
+```
+
+4. Extract the results. You need to do this step for all applications
+
+```
+cd <dragon-root>/examples/<application>/results
+python ../../analyzers/convert_result.py results.out cudamemcpy > result-cudamemcpy.data
+python ../../analyzers/convert_result.py results.out hostreg > result-hostreg.data
+python ../../analyzers/convert_result.py results.out uvm > result-uvm.data
+python ../../analyzers/convert_result.py results.out nvmgpu > result-nvmgpu.data
+```
+
+* Additional steps for *hotspot* and *vectorAdd*
+
+```
+cd <dragon-root>/examples/<application>/results
+python ../../analyzers/convert_result.py result-nvmgpu-rh-disable.out nvmgpu > result-nvmgpu-rh-disable.data
+```
+
+5. Generate graphs from the results.
+
+```
+cd <dragon-root>/examples/analyzers
+python ptc.py   # Figure 3
+python plot_compare_readahead.py    # Figure 5
 ```
