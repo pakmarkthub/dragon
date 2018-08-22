@@ -1,0 +1,39 @@
+#!/bin/bash
+
+print_usage()
+{
+    echo "Usage: $0 <folder-on-nvme>"
+}
+
+if [[ $# != 1 || $1 == "-h" || $1 == "--help" ]]; then
+    print_usage
+fi
+
+
+for bench in backprop binomialOptions BlackScholes hotspot lavaMD pathfinder srad_v2 vectorAdd  
+do
+    dfolder=$1/${bench}
+    echo "Generating data for ${bench} in ${dfolder} ..."
+
+    ( set -x; mkdir -p ${dfolder} )
+    ( set -x; ${bench}/scripts/gendata ${dfolder} range 4G 256G )
+
+    rfolder=${bench}/results
+    echo "Creating result folder for ${bench} in ${rfolder} ..."
+    ( set -x; mkdir -p ${rfolder} )
+
+    echo "Running ${bench} ..."
+
+    ( set -x; DRAGON_READAHEAD_TYPE=aggr ./${bench}/scripts/run --repeat 1 ${dfolder} container ${rfolder}/results.out --efile ${rfolder}/results.err )
+
+    err=$?
+    if [[ ${err} == 0 ]]
+    then
+        echo "End ${bench} successfully ..."
+        ( set -x; rm -rf ${dfolder} )
+    else
+        echo "End ${bench} with failure. Stopping the script ..."
+        echo "See ${rfolder}/results.out and ${rfolder}/results.err for more information"
+        exit ${err}
+    fi
+done
