@@ -1,0 +1,101 @@
+#!/bin/env python
+
+import argparse
+import os.path
+import subprocess
+import ctypes
+import math
+
+CWD = os.path.realpath(os.path.dirname(__file__))
+
+def type_folder(path):
+    if not os.path.isdir(path):
+        raise argparse.ArgumentTypeError('The specified path "{}" does not exist'.format(path))
+    return path
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+        description = 'Input generator for DRAGON experiments on Caffe'
+    )
+
+    parser.add_argument(
+        'experiment',
+        choices = ('c3d', 'resnet',),
+        help = 'Experiment name (c3d or resnet)'
+    )
+
+    parser.add_argument(
+        'rfolder', type = type_folder,
+        help = 'Raw data root folder'
+    )
+
+    parser.add_argument(
+        'ofolder', type = type_folder,
+        help = 'Converted data output folder'
+    )
+
+    return parser.parse_args()
+
+def gen_c3d(args, caffe_bin):
+    script_root_directory = os.path.join(CWD, '..', 'examples', 'c3d_ucf101_training')
+    convert_script_template = os.path.join(script_root_directory, 'convert_data.prototxt.template')
+    convert_script = os.path.join(script_root_directory, 'convert_data.prototxt')
+
+    with open(convert_script_template, 'r') as f:
+        script_content_template = f.read()
+        script_content_template = script_content_template.replace('{{ RAW_DATA }}', args.rfolder)
+
+        for length in (12, 24, 36, 48, 60, 72, 84,):
+            print('Converting C3D data for video length {} ...'.format(length))
+
+            out_train_data = os.path.join(args.ofolder, 'c3d-train-data-{}.mem'.format(length))
+            out_train_label = os.path.join(args.ofolder, 'c3d-train-label-{}.mem'.format(length))
+
+            script_content = script_content_template.replace('{{ LENGTH }}', str(length))
+            script_content = script_content.replace('{{ OUT_TRAIN_DATA }}', out_train_data)
+            script_content = script_content.replace('{{ OUT_TRAIN_LABEL }}', out_train_label)
+
+            with open(convert_script, 'w') as g:
+                g.write(script_content)
+            
+            subprocess.check_call(
+                [caffe_bin, 'train', '--solver=convert_data_solver.prototxt',],
+                cwd = script_root_directory
+            )
+
+
+def gen_resnet(args, caffe_bin):
+    script_root_directory = os.path.join(CWD, '..', 'examples', 'resnet-imagenet-caffe/resnet_data_convert')
+    convert_script_template = os.path.join(script_root_directory, 'resnet.prototxt.template')
+    convert_script = os.path.join(script_root_directory, 'resnet.prototxt')
+
+    print('Converting Resnet data ...')
+
+    with open(convert_script_template, 'r') as f:
+        script_content_template = f.read()
+        script_content_template = script_content_template.replace('{{ RAW_DATA }}', args.rfolder)
+
+        out_train_data = os.path.join(args.ofolder, 'resnet-train-data.mem')
+        out_train_label = os.path.join(args.ofolder, 'resnet-train-label.mem')
+
+        script_content = script_content_template.replace('{{ OUT_TRAIN_DATA }}', out_train_data)
+        script_content = script_content.replace('{{ OUT_TRAIN_LABEL }}', out_train_label)
+
+        with open(convert_script, 'w') as g:
+            g.write(script_content)
+        
+        subprocess.check_call(
+            [caffe_bin, 'train', '--solver=resnet_solver.prototxt',],
+            cwd = script_root_directory
+        )
+
+def main(args):
+    caffe_bin = os.path.join(CWD, '..', 'build', 'tools', 'caffe')
+    if args.experiment == 'c3d':
+        gen_c3d(args, caffe_bin)
+    else:
+        gen_resnet(args, caffe_bin)
+
+if __name__ == '__main__':
+    main(parseargs())
+    

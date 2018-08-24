@@ -24,7 +24,7 @@ def type_size(string):
 
 def parseargs():
     parser = argparse.ArgumentParser(
-        description = 'pathfinder input generator'
+        description = 'lavaMD input generator'
     )
 
     parser.add_argument(
