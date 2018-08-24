@@ -8,13 +8,13 @@ layer {
     phase: TRAIN
   }
   dragon_data_param {
-    data_source: "/mnt/nvme/pak/UCF-101/train_data.mem"
+    data_source: "{{ INPUT_TRAIN_DATA }}"
     width: 240
     height: 240
     depth: {{ LENGTH }}
     channels: 3
     length: 1000
-    labels_source: "/mnt/nvme/pak/UCF-101/train_labels.mem"
+    labels_source: "{{ INPUT_TRAIN_LABEL }}"
     batch_size: 1
   }
 }
@@ -28,13 +28,13 @@ layer {
     stage: "test-on-train"
   }
   dragon_data_param {
-    data_source: "/mnt/nvme/pak/UCF-101/train_data.mem"
+    data_source: "{{ INPUT_TRAIN_DATA }}"
     width: 240
     height: 240
     depth: {{ LENGTH }}
     channels: 3
     length: 1000
-    labels_source: "/mnt/nvme/pak/UCF-101/train_labels.mem"
+    labels_source: "{{ INPUT_TRAIN_LABEL }}"
     batch_size: 1
   }
 }
@@ -48,13 +48,13 @@ layer {
     stage: "test-on-val"
   }
   dragon_data_param {
-    data_source: "/mnt/nvme/pak/UCF-101/train_data.mem"
+    data_source: "{{ INPUT_TRAIN_DATA }}"
     width: 240
     height: 240
     depth: {{ LENGTH }}
     channels: 3
     length: 1000
-    labels_source: "/mnt/nvme/pak/UCF-101/train_labels.mem"
+    labels_source: "{{ INPUT_TRAIN_LABEL }}"
     batch_size: 1
   }
 }
