@@ -88,7 +88,7 @@ sudo su
 ./run --repeat 1 output.log
 ```
 
-## How to reproduce the results in the paper
+## How to reproduce the results in the paper (Evaluation Section)
 
 This section gives you steps for running all example applications, collecting
 and converting results, and generating the graphs.
@@ -140,4 +140,69 @@ python ../../analyzers/convert_result.py result-nvmgpu-rh-disable.out nvmgpu > r
 cd <dragon-root>/examples/analyzers
 python ptc.py   # Figure 3
 python plot_compare_readahead.py    # Figure 5
+```
+
+## How to reproduce the results in the paper (Case Study Section)
+
+This section provides steps for reproducing the results shown in the case study
+section. The experiment mainly uses our customized *Caffe* that comes with this
+repository: <dragon-root>/examples/caffe.
+
+1. Compile Caffe. Please follow the official
+[instruction](http://caffe.berkeleyvision.org/installation.html). Some important
+points regarding this compilation step:
+
+* Use the code provided in <dragon-root>/examples/caffe
+* Build using *cmake* in a new folder <dragon-root>/examples/caffe/build
+* Compile with *ATLAS*
+
+2. Download [ILSVRC12](http://www.image-net.org/challenges/LSVRC/2012/) and
+[UCF101](http://crcv.ucf.edu/data/UCF101.php) datasets.
+
+3. Convert the datasets to *memory-dump* format. If your NVMe capacity is small,
+you may want to convert only one dataset at a time and convert the other one
+after you finish the corresponding experiment.
+
+```
+cd <dragon-root>/examples/caffe/scripts
+./gendata c3d <path-to-ucf101> <folder-on-nvme-for-converted-ucf101-data>
+./gendata resnet <path-to-ilsvrc12> <folder-on-nvme-for-converted-ilsvrc12-data>
+```
+
+4. Run the C3D and Resnet experiments. The automated script need root privilege.
+One experiment may take several hours.
+
+```
+cd <dragon-root>/examples/caffe/scripts
+mkdir -p ../results/c3d
+mkdir -p ../results/resnet
+sudo su
+./run --log run-c3d.log c3d <path-to-converted-ucf101-data> ../results/c3d
+./run --log run-resnet.log resnet <path-to-converted-ilsvrc12-data> ../results/resnet
+mv ../results/c3d/result-cpu.data ../results/c3d/result-cpu-atlas.data
+mv ../results/resnet/result-cpu.data ../results/resnet/result-cpu-atlas.data
+```
+
+5. Recompile Caffe with *OpenBLAS OpenMP*. Please follow the official
+[instruction](http://caffe.berkeleyvision.org/installation.html). On CentOS7,
+you need to install ```sudo yum install openblas-openmp64.x86_64```.
+
+6. Rerun the experiments with OpenBLAS. This step need root privilege.
+
+```
+cd <dragon-root>/examples/caffe/scripts
+sudo su
+./run --log run-c3d.log --prog cpu c3d <path-to-converted-ucf101-data> ../results/c3d
+./run --log run-resnet.log --prog cpu resnet <path-to-converted-ilsvrc12-data> ../results/resnet
+mv ../results/c3d/result-cpu.data ../results/c3d/result-cpu-omp.data
+mv ../results/resnet/result-cpu.data ../results/resnet/result-cpu-omp.data
+mv ../results/c3d/result-cpu-atlas.data ../results/c3d/result-cpu.data
+mv ../results/resnet/result-cpu-atlas.data ../results/resnet/result-cpu.data
+```
+
+7. Generate Figure 7.
+
+```
+cd <dragon-root>/examples/caffe/analyzers
+python ptc_resnet_c3d.py    # Figure 7
 ```

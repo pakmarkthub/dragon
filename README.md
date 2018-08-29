@@ -65,5 +65,5 @@ up-to-dated instructions.
 
     * Pak Markthub, Mehmet E. Belviranli, Seyong Lee, Jeffrey S. Vetter, and Satoshi
 Matsuoka. DRAGON: Breaking GPU Memory Capacity Limits with Direct NVM Access. In
-Proceedings of the International Conference for High Performance Com- puting,
+Proceedings of the International Conference for High Performance Computing,
 Networking, Storage and Analysis (SC18). ACM, Dallas, USA, November 2018.
