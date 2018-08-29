@@ -8,12 +8,12 @@ layer {
     phase: TRAIN
   }
   dragon_data_param {
-    data_source: "/mnt/nvme/pak/ilsvrc12/train_data.mem"
-    labels_source: "/mnt/nvme/pak/ilsvrc12/train_labels.mem"
+    data_source: "{{ INPUT_TRAIN_DATA }}"
+    labels_source: "{{ INPUT_TRAIN_LABEL }}"
     width: 224
     height: 224
     channels: 3
-    length: 1281167
+    length: 10000
     batch_size: 40
   }
 }
@@ -26,12 +26,12 @@ layer {
     phase: TEST
   }
   dragon_data_param {
-    data_source: "/mnt/nvme/pak/ilsvrc12/val_data.mem"
-    labels_source: "/mnt/nvme/pak/ilsvrc12/val_labels.mem"
+    data_source: "{{ INPUT_TRAIN_DATA }}"
+    labels_source: "{{ INPUT_TRAIN_LABEL }}"
     width: 224
     height: 224
     channels: 3
-    length: 50000
+    length: 10000
     batch_size: 8
   }
 }

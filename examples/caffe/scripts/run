@@ -283,6 +283,193 @@ def run_c3d_cpu(args, caffe_bin):
                 else:
                     raise Exception('Fail. This should never happen!!!')
 
+def run_resnet_original(args, caffe_bin):
+    load_original_driver()
+
+    data_folder = os.path.abspath(args.dfolder)
+
+    pscript_root_folder = os.path.join(CWD, '..', 'examples', 'resnet-imagenet-caffe')
+
+    with open(os.path.join(args.rfolder, 'result-original.data'), 'w') as result_file:
+        result_file.write('model,total_time (s)\n')
+
+        for num in (32, 50, 101, 152,):
+            prototxt_root_folder = os.path.join(pscript_root_folder, 'resnet_{}'.format(num))
+            template_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt.template'.format(num))
+            prototxt_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt'.format(num))
+
+            with open(template_file_path, 'r') as f:
+                print('Benchmarking Resnet-{} original ...'.format(num))
+
+                template_content = f.read()
+
+                prototxt_content = template_content.replace('{{ INPUT_LAYER_TYPE }}', 'DragonFreadData')
+
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_DATA }}', os.path.join(data_folder, 'resnet-train-data-{}.mem'.format(length)))
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_LABEL }}', os.path.join(data_folder, 'resnet-train-label-{}.mem'.format(length)))
+
+                with open(prototxt_file_path, 'w') as g:
+                    g.write(prototxt_content)
+
+                clear_dmesg()
+                clear_cache()
+
+                start_timestamp = datetime.datetime.now()
+                retcode = subprocess.call(
+                    [caffe_bin, 'train', '--solver=resnet_{}/resnet_{}_solver.prototxt'.format(num, num),],
+                    cwd = pscript_root_folder,
+                    stdout = args.log,
+                    stderr = args.log
+                )
+                end_timestamp = datetime.datetime.now()
+
+                if retcode == 0:
+                    print('Success. Writing result ...')
+                    result_file.write('resnet_{},{}\n'.format(num, (end_timestamp - start_timestamp).total_seconds()))
+                else:
+                    print('Fail. Maybe due to out-of-memory')
+
+def run_resnet_uvm(args, caffe_bin):
+    load_original_driver()
+
+    data_folder = os.path.abspath(args.dfolder)
+
+    pscript_root_folder = os.path.join(CWD, '..', 'examples', 'resnet-imagenet-caffe')
+
+    with open(os.path.join(args.rfolder, 'result-uvm.data'), 'w') as result_file:
+        result_file.write('model,total_time (s)\n')
+
+        for num in (32, 50, 101, 152,):
+            prototxt_root_folder = os.path.join(pscript_root_folder, 'resnet_{}'.format(num))
+            template_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt.template'.format(num))
+            prototxt_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt'.format(num))
+
+            with open(template_file_path, 'r') as f:
+                print('Benchmarking Resnet-{} UVM ...'.format(num))
+
+                template_content = f.read()
+
+                prototxt_content = template_content.replace('{{ INPUT_LAYER_TYPE }}', 'DragonFreadData')
+
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_DATA }}', os.path.join(data_folder, 'resnet-train-data-{}.mem'.format(length)))
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_LABEL }}', os.path.join(data_folder, 'resnet-train-label-{}.mem'.format(length)))
+
+                with open(prototxt_file_path, 'w') as g:
+                    g.write(prototxt_content)
+
+                clear_dmesg()
+                clear_cache()
+
+                start_timestamp = datetime.datetime.now()
+                retcode = subprocess.call(
+                    [caffe_bin, 'train', '--solver=resnet_{}/resnet_{}_solver.prototxt'.format(num, num), '--enable_uvm=true',],
+                    cwd = pscript_root_folder,
+                    stdout = args.log,
+                    stderr = args.log
+                )
+                end_timestamp = datetime.datetime.now()
+
+                if retcode == 0:
+                    print('Success. Writing result ...')
+                    result_file.write('resnet_{},{}\n'.format(num, (end_timestamp - start_timestamp).total_seconds()))
+                else:
+                    print('Fail. Maybe due to out-of-memory')
+
+def run_resnet_nvmgpu(args, caffe_bin):
+    load_nvmgpu_driver()
+
+    data_folder = os.path.abspath(args.dfolder)
+
+    pscript_root_folder = os.path.join(CWD, '..', 'examples', 'resnet-imagenet-caffe')
+
+    with open(os.path.join(args.rfolder, 'result-dragon.data'), 'w') as result_file:
+        result_file.write('model,total_time (s)\n')
+
+        for num in (32, 50, 101, 152,):
+            prototxt_root_folder = os.path.join(pscript_root_folder, 'resnet_{}'.format(num))
+            template_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt.template'.format(num))
+            prototxt_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt'.format(num))
+
+            with open(template_file_path, 'r') as f:
+                print('Benchmarking Resnet-{} DRAGON ...'.format(num))
+
+                template_content = f.read()
+
+                prototxt_content = template_content.replace('{{ INPUT_LAYER_TYPE }}', 'DragonData')
+
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_DATA }}', os.path.join(data_folder, 'resnet-train-data-{}.mem'.format(length)))
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_LABEL }}', os.path.join(data_folder, 'resnet-train-label-{}.mem'.format(length)))
+
+                with open(prototxt_file_path, 'w') as g:
+                    g.write(prototxt_content)
+
+                clear_dmesg()
+                clear_cache()
+
+                start_timestamp = datetime.datetime.now()
+                retcode = subprocess.call(
+                    [caffe_bin, 'train', '--solver=resnet_{}/resnet_{}_solver.prototxt'.format(num, num), '--enable_dragon=true', '--dragon_tmp_folder={}'.format(data_tmp_folder),],
+                    cwd = pscript_root_folder,
+                    stdout = args.log,
+                    stderr = args.log
+                )
+                end_timestamp = datetime.datetime.now()
+
+                dump_dmesg(args)
+
+                if retcode == 0:
+                    print('Success. Writing result ...')
+                    result_file.write('resnet_{},{}\n'.format(num, (end_timestamp - start_timestamp).total_seconds()))
+                else:
+                    raise Exception('Fail. This should never happen!!!')
+
+def run_resnet_cpu(args, caffe_bin):
+    load_original_driver()
+
+    data_folder = os.path.abspath(args.dfolder)
+
+    pscript_root_folder = os.path.join(CWD, '..', 'examples', 'resnet-imagenet-caffe')
+
+    with open(os.path.join(args.rfolder, 'result-cpu.data'), 'w') as result_file:
+        result_file.write('model,total_time (s)\n')
+
+        for num in (32, 50, 101, 152,):
+            prototxt_root_folder = os.path.join(pscript_root_folder, 'resnet_{}'.format(num))
+            template_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt.template'.format(num))
+            prototxt_file_path = os.path.join(prototxt_root_folder, 'resnet_{}.prototxt'.format(num))
+
+            with open(template_file_path, 'r') as f:
+                print('Benchmarking Resnet-{} CPU ...'.format(num))
+
+                template_content = f.read()
+
+                prototxt_content = template_content.replace('{{ INPUT_LAYER_TYPE }}', 'DragonMmapData')
+
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_DATA }}', os.path.join(data_folder, 'resnet-train-data-{}.mem'.format(length)))
+                prototxt_content = prototxt_content.replace('{{ INPUT_TRAIN_LABEL }}', os.path.join(data_folder, 'resnet-train-label-{}.mem'.format(length)))
+
+                with open(prototxt_file_path, 'w') as g:
+                    g.write(prototxt_content)
+
+                clear_dmesg()
+                clear_cache()
+
+                start_timestamp = datetime.datetime.now()
+                retcode = subprocess.call(
+                    [caffe_bin, 'train', '--solver=resnet_{}/resnet_{}_solver_cpu.prototxt'.format(num, num), '--enable_mmap=true', '--dragon_tmp_folder={}'.format(data_tmp_folder),],
+                    cwd = pscript_root_folder,
+                    stdout = args.log,
+                    stderr = args.log
+                )
+                end_timestamp = datetime.datetime.now()
+
+                if retcode == 0:
+                    print('Success. Writing result ...')
+                    result_file.write('resnet_{},{}\n'.format(num, (end_timestamp - start_timestamp).total_seconds()))
+                else:
+                    raise Exception('Fail. This should never happen!!!')
+
+
 def main(args):
     caffe_bin = os.path.join(CWD, '..', 'build', 'tools', 'caffe')
     if args.experiment == 'c3d':
@@ -300,7 +487,19 @@ def main(args):
         elif args.prog == 'cpu':
             run_c3d_cpu(args, caffe_bin)
     else:
-        raise NotImplementedError()
+        if args.prog == 'all':
+            run_resnet_original(args, caffe_bin)
+            run_resnet_uvm(args, caffe_bin)
+            run_resnet_nvmgpu(args, caffe_bin)
+            run_resnet_cpu(args, caffe_bin)
+        elif args.prog == 'original':
+            run_resnet_original(args, caffe_bin)
+        elif args.prog == 'uvm':
+            run_resnet_uvm(args, caffe_bin)
+        elif args.prog == 'nvmgpu':
+            run_resnet_nvmgpu(args, caffe_bin)
+        elif args.prog == 'cpu':
+            run_resnet_cpu(args, caffe_bin)
 
 if __name__ == '__main__':
     main(parseargs())
