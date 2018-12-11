@@ -13,7 +13,9 @@ Both components need to be set up properly in order to use DRAGON.
 * Python2.7 or above
 * glibc-2.0
 * CUDA version 9.0 or above
-* NVIDIA GPU driver version 384.81 -- currently support this version only
+* NVIDIA GPU driver 
+  * Version 384.81 (compatible with CUDA 9.0 and below)
+  * Version 410.48 (compatible with CUDA 10.0 and below)
 
 ### Runtime environment
 
@@ -27,27 +29,31 @@ Both components need to be set up properly in order to use DRAGON.
 
 ## How to prepare *dragon-driver*
 
-1. Get NVIDIA GPU driver version 384.81 from [the NVIDIA
+**Note:** You need to replace *<version>* with the NVIDIA GPU driver version you
+choose. Install that driver version on your system first before follow the
+instructions below.
+
+1. Get NVIDIA GPU driver version 384.81 or 410.48 from [the NVIDIA
 website](https://www.nvidia.com/drivers/beta). The downloaded driver file should
 be in \*.run file format.
 
 2. If the downloaded file is not executable
 ```
-chmod +x NVIDIA-Linux-x86_64-384.81.run
+chmod +x NVIDIA-Linux-x86_64-<version>.run
 ```
 
 3. Extract this file to the *drivers* directory.  After execute this
-instruction, the *NVIDIA-Linux-x86_64-384.81* directory should appear in the
+instruction, the *NVIDIA-Linux-x86_64-\<version\>* directory should appear in the
 *drivers* directory.  Due to license issues, we cannot distribute this driver
 with this repository.
 ```
 cd <dragon-root>/drivers
-./NVIDIA-Linux-x86_64-384.81.run -x
+./NVIDIA-Linux-x86_64-<version>.run -x
 ```
 
 4. Run the *prepare-dragon-driver* script in the *scripts* folder.
 ```
-../scripts/prepare-dragon-driver nvidia-uvm-384.81.patch NVIDIA-Linux-x86_64-384.81
+../scripts/prepare-dragon-driver nvidia-uvm-<version>.patch NVIDIA-Linux-x86_64-<version>
 ```
 
 ## How to compile *libdragon*
