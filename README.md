@@ -7,6 +7,16 @@ NVM and mapping it to the global memory space of the GPU. This enables GPU
 kernels to access the data via regular load/store instructions, similar to how
 *mmap()* operates in CPUs.
 
+## Contact Us
+
+To people who reach this page from our paper: 
+
+My university email address, which is written on the paper, will be expired
+soon. You can contact me via "pak.markthub+dragon at gmail dot com", or by
+opening an issue on GitHub.
+
+Pak Markthub
+
 ## Getting Started
 
 This project composes of multiple components. To install DRAGON, follow the
@@ -20,7 +30,7 @@ For the versions available, see the [tags on this repository](https://github.com
 
 ## Authors
 
-* [Pak Markthub](https://www.linkedin.com/in/pakmarkthub)
+* [Pak Markthub](https://www.linkedin.com/in/pakmarkthub) (pak.markthub+dragon at gmail dot com)
 * [Mehmet E. Belviranli](https://ft.ornl.gov/~belviranli/)
 * [Seyong Lee](https://ft.ornl.gov/~lees2/)
 * [Jeffrey S. Vetter](https://ft.ornl.gov/~vetter/)
