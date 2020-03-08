@@ -17,11 +17,11 @@ Both components need to be set up properly in order to use DRAGON.
   * Version 384.81 
     * compatible with CUDA 9.0 and below
     * compatible with linux kernel version 3.10 or above but below 4.0
-    * tested on CentOS 7
+    * tested on CentOS 7 and Ubuntu 16.04
   * Version 410.48 
     * compatible with CUDA 9.0 and below
     * compatible with linux kernel version 3.10 or above but below 4.0
-    * tested on CentOS 7
+    * tested on CentOS 7 and Ubuntu 16.04
   * Version 440.33.01 
     * compatible with CUDA 10.2 and below
     * compatible linux kernel version 5.0 or above
