@@ -65,7 +65,7 @@ static dragonError_t init_module()
 {
     DIR *d;
     struct dirent *dir;
-    char psf_path[256];
+    char psf_path[512];
     char *psf_realpath;
     dragon_ioctl_init_t request;
     int status;
