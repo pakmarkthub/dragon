@@ -14,13 +14,23 @@ Both components need to be set up properly in order to use DRAGON.
 * glibc-2.0
 * CUDA version 9.0 or above
 * NVIDIA GPU driver 
-  * Version 384.81 (compatible with CUDA 9.0 and below)
-  * Version 410.48 (compatible with CUDA 10.0 and below)
+  * Version 384.81 
+    * compatible with CUDA 9.0 and below
+    * compatible with linux kernel version 3.10 or above but below 4.0
+    * tested on CentOS 7
+  * Version 410.48 
+    * compatible with CUDA 9.0 and below
+    * compatible with linux kernel version 3.10 or above but below 4.0
+    * tested on CentOS 7
+  * Version 440.33.01 
+    * compatible with CUDA 10.2 and below
+    * compatible linux kernel version 5.0 or above
+    * tested on Ubuntu 18.04 (linux kernel 5.3.0-40-generic)
 
 ### Runtime environment
 
-* Linux OS (tested on CentOS 7)
-* Linux kernel version 3.10 or above but below 4.0 (incompatible with kernel 4.x)
+* Linux OS (tested on CentOS 7 and Ubuntu 18.04)
+* Linux kernel version 3.10 or above but below 4.0, or 5.0 and above (incompatible with kernel 4.x)
 * Storage formatted with the ext4 filesystem
 
 ### Hardware
@@ -33,7 +43,7 @@ Both components need to be set up properly in order to use DRAGON.
 choose. Install that driver version on your system first before follow the
 instructions below.
 
-1. Get NVIDIA GPU driver version 384.81 or 410.48 from [the NVIDIA
+1. Get NVIDIA GPU driver version 384.81, 410.48, or 440.33.01 from [the NVIDIA
 website](https://www.nvidia.com/drivers/beta). The downloaded driver file should
 be in \*.run file format.
 
