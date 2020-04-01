@@ -17,6 +17,13 @@ opening an issue on GitHub.
 
 Pak Markthub
 
+### Experimental Features
+
+1. DRAGON-DIRECT
+   - Use DMA to transfer data from NVMe to GPU.
+   - No host staging in between.
+   - Tracking in branch [dev-nvme-gpudirect](https://github.com/pakmarkthub/dragon/tree/dev-nvme-gpudirect).
+
 ## Getting Started
 
 This project composes of multiple components. To install DRAGON, follow the
