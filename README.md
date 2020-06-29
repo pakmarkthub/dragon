@@ -26,10 +26,15 @@ example applications, see the [README.md](examples/README.md) file in the
 
 ### Experimental Features
 
+All features are tracked in branch [dev](https://github.com/pakmarkthub/dragon/tree/dev).
+
 1. DRAGON-DIRECT
    - Use DMA to transfer data from NVMe to GPU.
-   - No host staging in between.
-   - Tracking in branch [dev-nvme-gpudirect](https://github.com/pakmarkthub/dragon/tree/dev-nvme-gpudirect).
+   - No host page caching in between.
+
+2. DRAGON-Resident
+   - Query the current physical location on the mapped buffers at runtime.
+
 
 ## Versioning
 
