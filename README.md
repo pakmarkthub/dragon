@@ -34,7 +34,7 @@ All features are tracked in branch [dev](https://github.com/pakmarkthub/dragon/t
 
 2. DRAGON-Resident
    - Query the current physical location on the mapped buffers at runtime.
-
+   - Pin pages in GPU memory. Disable eviction of those pinned pages.
 
 ## Versioning
 
