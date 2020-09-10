@@ -29,9 +29,9 @@ Both components need to be set up properly in order to use DRAGON.
 
 ### Runtime environment
 
-* Linux OS (tested on CentOS 7 and Ubuntu 18.04)
+* Linux OS (tested on CentOS 7,8 and Ubuntu 18.04)
 * Linux kernel version 3.10 or above but below 4.0, or 5.0 and above (incompatible with kernel 4.x)
-* Storage formatted with the ext4 filesystem
+* Storage formatted with the *ext4* filesystem. (Default CentOS partition is XFS. Dragon only supports EXT4 as of now.)
 
 ### Hardware
 
@@ -43,7 +43,7 @@ Both components need to be set up properly in order to use DRAGON.
 choose. Install that driver version on your system first before follow the
 instructions below.
 
-1. Get NVIDIA GPU driver version 384.81, 410.48, or 440.33.01 from [the NVIDIA
+1. Get NVIDIA GPU driver version 384.81, 410.48, 440.33.01 or 440.82 from [the NVIDIA
 website](https://www.nvidia.com/drivers/beta). The downloaded driver file should
 be in \*.run file format.
 
